@@ -11,6 +11,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import { connect } from 'http2';
+//import fs from "fs";
 
 // ✅ Load environment variables
 dotenv.config();
@@ -34,6 +35,24 @@ app.use(bodyParser.json());
 app.use(express.json());
 
 
+
+// Set storage for uploaded pictures
+/*const storage1 = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = "uploads/staff_pictures";
+    fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // unique filename: timestamp + original name
+    cb(null, Date.now() + path.extname(file.originalname));
+  },
+});
+
+//const upload1 = multer({ storage1 });
+const upload1 = multer({ storage: storage1 });
+
+*/
 
 // ✅ MySQL Connection using env variables
 /*const db = mysql.createConnection({
@@ -174,6 +193,120 @@ app.post('/signup1', async (req, res) => {
 });
 
 
+
+
+
+
+// Create staff
+/*app.post("/signup2", upload1.single("picture"), (req, res) => {
+  const { full_name, email, phone, password, role } = req.body;
+  let picture_url = req.file ? req.file.path : null;
+
+  // Hash password
+  bcrypt.hash(password || "", 10)
+    .then((hashedPassword) => {
+      // Insert into DB
+      return db.execute(
+        `INSERT INTO user (full_name, email, phone, password, role, picture_url)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          full_name || null,
+          email || null,
+          phone || null,
+          hashedPassword || null,
+          role || null,
+          picture_url || null
+        ]
+      );
+    })
+    .then(([result]) => {
+      // Send response back
+      res.json({
+        id: result.insertId,
+        full_name,
+        email,
+        phone,
+        role,
+        picture_url,
+      });
+    })
+    .catch((err) => {
+      console.error(err);
+      res.status(500).json({ error: "Database or hashing error" });
+    });
+});
+// Update staff
+app.put("/user/:id", upload1.single("picture"), (req, res) => {
+  const { id } = req.params;
+  const { full_name, email, phone, password, role } = req.body;
+  let picture_url = null;
+
+  if (req.file) {
+    picture_url = req.file.path;
+  }
+
+  const fields = [];
+  const values = [];
+
+  if (full_name) { fields.push("full_name=?"); values.push(full_name); }
+  if (email) { fields.push("email=?"); values.push(email); }
+  if (phone) { fields.push("phone=?"); values.push(phone); }
+  if (role) { fields.push("role=?"); values.push(role); }
+  if (picture_url) { fields.push("picture_url=?"); values.push(picture_url); }
+
+  // If password is provided, hash it first
+  if (password) {
+    bcrypt.hash(password, 10)
+      .then((hashedPassword) => {
+        fields.push("password=?");
+        values.push(hashedPassword);
+
+        db.execute(`UPDATE user SET ${fields.join(", ")} WHERE id=?`, [...values, id])
+          .then(() => res.json({ message: "Staff updated successfully" }))
+          .catch((err) => {
+            console.error(err);
+            res.status(500).json({ error: "Database error" });
+          });
+      })
+      .catch((err) => {
+        console.error(err);
+        res.status(500).json({ error: "Error hashing password" });
+      });
+  } else {
+    // No password change
+    db.execute(`UPDATE user SET ${fields.join(", ")} WHERE id=?`, [...values, id])
+      .then(() => res.json({ message: "Staff updated successfully" }))
+      .catch((err) => {
+        console.error(err);
+        res.status(500).json({ error: "Database error" });
+      });
+  }
+});
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+
+
+
+// Get all staff
+app.get("/user", async (req, res) => {
+  const { role } = req.query;
+  try {
+    let sql = "SELECT * FROM user";
+    const params = [];
+    if (role) {
+      sql += " WHERE role=?";
+      params.push(role);
+    }
+    const [rows] = await db.execute(sql, params);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+*/
+
 // --- LOGIN ENDPOINT ---
 // --- LOGIN ENDPOINT ---
 app.post('/login', (req, res) => {
@@ -196,6 +329,12 @@ app.post('/login', (req, res) => {
     if (!isMatch)
       return res.status(401).json({ message: 'Invalid credentials' });
 
+
+    // Update status to 'online'
+    db.query("UPDATE users SET status='online', last_login=NOW() WHERE id=?", [user.id], (err2) => {
+      if (err2) console.error("Error updating status:", err2);
+    });
+
     // Create JWT token with role info
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
@@ -214,6 +353,95 @@ app.post('/login', (req, res) => {
         role: user.role
       }
     });
+  });
+});
+
+
+
+
+
+// CHANGE PASSWORD API
+app.post("/api/change-password", (req, res) => {
+
+  const { userId, currentPassword, newPassword } = req.body;
+
+  if (!userId || !currentPassword || !newPassword) {
+    return res.status(400).json({
+      message: "All fields are required"
+    });
+  }
+
+  // Get user from database
+  const sql = "SELECT password FROM users WHERE id = ?";
+
+  db.query(sql, [userId], async (err, result) => {
+
+    if (err) {
+      return res.status(500).json({
+        message: "Database error"
+      });
+    }
+
+    if (result.length === 0) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    const storedPassword = result[0].password;
+
+    // Compare current password
+    const isMatch = await bcrypt.compare(currentPassword, storedPassword);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Current password is incorrect"
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    const updateSql = "UPDATE users SET password = ? WHERE id = ?";
+
+    db.query(updateSql, [hashedPassword, userId], (err) => {
+
+      if (err) {
+        return res.status(500).json({
+          message: "Failed to update password"
+        });
+      }
+
+      res.json({
+        message: "Password updated successfully"
+      });
+
+    });
+
+  });
+
+});
+
+
+
+
+
+
+
+
+
+
+
+// LOGOUT ROUTE
+app.post("/logout", (req, res) => {
+  const { userId } = req.body;
+
+  db.query("UPDATE users SET status='offline' WHERE id=?", [userId], (err) => {
+    if (err) {
+      console.error("Error updating logout status:", err);
+      return res.status(500).json({ message: "Server error" });
+    }
+    res.json({ message: "Logged out successfully" });
   });
 });
 
@@ -268,6 +496,23 @@ app.use("/uploads", express.static("uploads"));
 
 //app.use("/api/loan", loanRoutes);
 
+//GET all customers
+app.get("/api/customers/all", (req, res) => {
+  const sql = `
+    SELECT id, kyc_code, firstName, middleName, lastName, dateOfBirth, gender,
+           mobileNumber, email, city, employmentStatus, monthlyIncome
+    FROM customers_kyc
+    ORDER BY createdAt DESC
+  `;
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: "Database query failed" });
+    }
+    res.json(results);
+  });
+});
 
 
 
@@ -330,15 +575,28 @@ app.post("/api/verify-customer", (req, res) => {
 
 
 
-
-
+app.get("/userss", (req, res) => {
+  const sql = `
+    SELECT id, full_name, email, phone, role, created_at
+    FROM users
+    WHERE role IN ('customer')
+  `;
+  db.query(sql, (err, results) => {
+    if (err) return res.status(500).json(err);
+    res.json(results);
+  });
+});
 
 
 
 
 
 app.get("/users", (req, res) => {
-  const sql = "SELECT id, full_name, email, phone, role, created_at FROM users";
+  const sql = `
+    SELECT id, full_name, email, phone, role, created_at
+    FROM users
+    WHERE role IN ('admin', 'loan_officer')
+  `;
   db.query(sql, (err, results) => {
     if (err) return res.status(500).json(err);
     res.json(results);
@@ -407,7 +665,7 @@ app.delete("/users/:id", (req, res) => {
 
 
 // GET all users with optional search
-app.get("/userss", (req, res) => {
+/*app.get("/userss", (req, res) => {
   const { search } = req.query;
   let sql = "SELECT id, full_name, email, phone, role, created_at FROM users";
 
@@ -424,7 +682,7 @@ app.get("/userss", (req, res) => {
       res.json(results);
     });
   }
-});
+});*/
 
 
 
@@ -468,15 +726,7 @@ app.get("/api/customers/search", (req, res) => {
 app.get('/api/loan-applications/pending', (req, res) => {
   const sql = `
     SELECT 
-      id,
-      kycCode,
-      fullName,
-      loanType,
-      loanAmount,
-      createdAt,
-      phone,
-      
-      'pending' AS status
+     *
     FROM loans
     ORDER BY createdAt DESC
   `;
@@ -560,105 +810,6 @@ app.post("/api/loan/apply-loan", (req, res) => {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-// API endpoint to save applicant profile
-app.post('/api/applications/save-profile', (req, res) => {
-  const { loanId, customerId, applicantName, contactNumber, creditOfficer, loanType, loanAmount, applicationDate } = req.body;
-
-  const sql = `
-    INSERT INTO applicant_profiles 
-    (loanId, customerId, applicantName, contactNumber, creditOfficer, loanType, loanAmount, applicationDate)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      applicantName = VALUES(applicantName),
-      contactNumber = VALUES(contactNumber),
-      creditOfficer = VALUES(creditOfficer),
-      loanType = VALUES(loanType),
-      loanAmount = VALUES(loanAmount),
-      applicationDate = VALUES(applicationDate)
-  `;
-
-  db.query(
-    sql,
-    [loanId, customerId, applicantName, contactNumber, creditOfficer, loanType, loanAmount, applicationDate],
-    (err, result) => {
-      if (err) return res.status(500).json({ message: err.message });
-      res.json({ message: 'Profile saved successfully', result });
-    }
-  );
-});
-
-//app.listen(5000, () => console.log('Server running on port 5000'));
-
-
-
-
-
-
-
-// Simple route to save collateral (no MVC)
-app.post('/api/collateral/save', (req, res) => {
-  const data = req.body;
-
-  const sql = `
-    INSERT INTO collateral_details
-    (loanId, lendingType, collateralType,
-     landLocation, landSize, landValue,
-     vehicleMake, vehicleModel, vehicleValue,
-     buildingType, buildingSize, buildingValue,
-     bankName, accountNumber, depositAmount)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      lendingType=VALUES(lendingType),
-      collateralType=VALUES(collateralType),
-      landLocation=VALUES(landLocation),
-      landSize=VALUES(landSize),
-      landValue=VALUES(landValue),
-      vehicleMake=VALUES(vehicleMake),
-      vehicleModel=VALUES(vehicleModel),
-      vehicleValue=VALUES(vehicleValue),
-      buildingType=VALUES(buildingType),
-      buildingSize=VALUES(buildingSize),
-      buildingValue=VALUES(buildingValue),
-      bankName=VALUES(bankName),
-      accountNumber=VALUES(accountNumber),
-      depositAmount=VALUES(depositAmount)
-  `;
-
-  db.query(sql, [
-    data.loanId, data.lendingType, data.collateralType,
-    data.landLocation || null, data.landSize || null, data.landValue || null,
-    data.vehicleMake || null, data.vehicleModel || null, data.vehicleValue || null,
-    data.buildingType || null, data.buildingSize || null, data.buildingValue || null,
-    data.bankName || null, data.accountNumber || null, data.depositAmount || null
-  ], (err, result) => {
-    if (err) {
-      console.error('Error saving collateral:', err);
-      return res.status(500).json({ message: 'Failed to save collateral', error: err });
-    }
-    res.json({ message: 'Collateral saved successfully', result });
-  });
-});
-
-
-
-
-
-
-
-
-
 // ✅ Multer setup for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
@@ -666,73 +817,6 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// ✅ KYC submission endpoint
-/*app.post(
-  "/kyc/submit",
-  upload.fields([
-    { name: "idDocument", maxCount: 1 },
-    { name: "addressProof", maxCount: 1 },
-    { name: "incomeProof", maxCount: 1 }
-  ]),
-  (req, res) => {
-    const data = req.body;
-    const files = req.files;
-
-    const sql = `
-      INSERT INTO customers_kyc (
-        firstName, middleName, lastName, dateOfBirth, gender, nationality,
-        maritalStatus, nationalId, passportNumber, taxId, mobileNumber,
-        email, residentialAddress, city, state, zipCode, postalAddress,
-        employmentStatus, employerName, jobTitle, monthlyIncome,
-        businessType, yearsInCurrentEmployment, bankName, bankAccountNumber,
-        accountType, branch, loanPurpose, existingLoans,
-        idDocument, addressProof, incomeProof
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `;
-
-    const values = [
-      data.firstName, data.middleName, data.lastName, data.dateOfBirth, data.gender,
-      data.nationality, data.maritalStatus, data.nationalId, data.passportNumber, data.taxId,
-      data.mobileNumber, data.email, data.residentialAddress, data.city, data.state,
-      data.zipCode, data.postalAddress, data.employmentStatus, data.employerName,
-      data.jobTitle, data.monthlyIncome, data.businessType, data.yearsInCurrentEmployment,
-      data.bankName, data.bankAccountNumber, data.accountType, data.branch,
-      data.loanPurpose, data.existingLoans,
-      files?.idDocument?.[0]?.filename || null,
-      files?.addressProof?.[0]?.filename || null,
-      files?.incomeProof?.[0]?.filename || null
-    ];
-
-    db.query(sql, values, (err, result) => {
-      if (err) {
-        console.error("Database insert error:", err);
-        return res.status(500).json({ message: "Database error", error: err });
-      }
-
-      // Generate KYC code
-      const kycCode = String(result.insertId).padStart(5, "0");
-
-      // Update KYC code
-      const updateSql = `UPDATE customers_kyc SET kyc_code = ? WHERE id = ?`;
-      db.query(updateSql, [kycCode, result.insertId], (err2) => {
-        if (err2) {
-          console.error("Error updating KYC code:", err2);
-          return res.status(500).json({ message: "Failed to update KYC code" });
-        }
-
-        return res.json({
-          message: "KYC submitted successfully!",
-          id: result.insertId,
-          kycCode
-        });
-      });
-    });
-  }
-);
-
-
-
-*/
 
 
 
@@ -823,63 +907,6 @@ app.post(
     });
   }
 );
-
-
-
-
-
-
-
-
-
-
-// ===== Submit All Steps Endpoint =====
-// ===== Submit All Steps =====
-/*app.post("/api/applications/submit-all", (req, res) => {
-  const data = req.body;
-
-  const sql = `
-    INSERT INTO credit_applications
-    (loan_id, customer_id, applicant_name, contact_number, credit_officer, loan_type, loan_amount, application_date,
-     lending_type, collateral_type, collateral_details, credit_score, existing_loans, remarks,
-     internal_comment, external_comment, decision)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-
-  const values = [
-    data.loanId,
-    data.customerId,
-    data.applicantName,
-    data.contactNumber,
-    data.creditOfficer,
-    data.loanType,
-    //data.loanAmount,
-    data.loanAmount ? Number(data.loanAmount) : null, // convert to number or null
-    data.applicationDate,
-    data.lendingType || null,
-    data.collateralType || null,
-    JSON.stringify(data.details || {}), // collateral details
-    data.creditScore || null,
-    data.existingLoans || null,
-    data.remarks || null,
-    data.internalComment || null,
-    data.externalComment || null,
-    data.decision || null,
-  ];
-
-  db.query(sql, values, (err, result) => {
-    if (err) {
-      console.error("Database insert error:", err);
-      return res.status(500).json({ success: false, message: "Database error", error: err });
-    }
-
-    res.json({
-      success: true,
-      message: "Application submitted successfully",
-      id: result.insertId,
-    });
-  });
-}); */
 
 
 
