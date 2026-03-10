@@ -1,44 +1,64 @@
+// server.js
 import express from "express";
 import mysql from "mysql2";
 import multer from "multer";
 import cors from "cors";
-import bodyParser from "body-parser";
+import dotenv from "dotenv";
 import path from "path";
+import { fileURLToPath } from "url";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
 
-// File upload setup
+// Enable CORS
+app.use(cors());
+
+// Parse JSON bodies (for non-file fields)
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Serve uploaded files statically
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// ---------- MySQL Connection ----------
+const db = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+});
+
+db.getConnection((err, conn) => {
+  if (err) {
+    console.error("Database connection failed:", err);
+  } else {
+    console.log("✅ Connected to MySQL database");
+    conn.release();
+  }
+});
+
+// ---------- Multer Setup for File Uploads ----------
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/");
+  destination: (req, file, cb) => {
+    cb(null, "./uploads"); // folder where files are stored
   },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
+  filename: (req, file, cb) => {
+    const uniqueName = `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
   },
 });
+
 const upload = multer({ storage });
 
-// Normal MySQL connection
-const db = mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "Bench123$qwert", // your password
-  database: "yonkopa1",
-});
-
-db.connect((err) => {
-  if (err) throw err;
-  console.log("✅ Connected to MySQL database");
-});
-
-// POST /api/kyc/submit
+// ---------- KYC Submit Route ----------
 app.post(
   "/api/kyc/submit",
   upload.fields([
+    { name: "avatar", maxCount: 1 },
     { name: "payslip", maxCount: 1 },
     { name: "ghanaCardFront", maxCount: 1 },
     { name: "ghanaCardBack", maxCount: 1 },
@@ -50,19 +70,24 @@ app.post(
       const data = req.body;
       const files = req.files;
 
-      const query = `
-        INSERT INTO customer_kyc (
-          title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
-          nationalId, taxId, residentialLocation, residentialLandmark, spouseName,
-          spouseContact, mobileNumber, email, residentialAddress, city, state, zipCode,
-          employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment,
-          workPlaceLocation, businessName, businessType, monthlyBusinessIncome,
-          businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness,
-          workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
+     const query = `
+INSERT INTO customer_kyc (
+  kycCode, avatar, title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
+  nationalId, taxId, residentialLocation, residentialLandmark, spouseName, spouseContact,
+  mobileNumber, email, residentialAddress, city, state, zipCode,
+  employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment,
+  workPlaceLocation, businessName, businessType, monthlyBusinessIncome,
+  businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness,
+  workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture,
+  createdAt
+) VALUES (
+  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+`;
 
       const values = [
+        data.kycCode || null,
+        files.avatar?.[0]?.filename || null,
         data.title || null,
         data.firstName || null,
         data.middleName || null,
@@ -101,6 +126,7 @@ app.post(
         files.ghanaCardBack?.[0]?.filename || null,
         files.employmentId?.[0]?.filename || null,
         files.businessPicture?.[0]?.filename || null,
+        new Date(),
       ];
 
       db.query(query, values, (err, result) => {
@@ -108,13 +134,15 @@ app.post(
           console.error("Insert error:", err);
           return res.status(500).json({ message: "Failed to submit KYC", error: err.message });
         }
-        res.status(200).json({ message: "KYC submitted successfully" });
+        res.status(200).json({ message: "KYC submitted successfully", id: result.insertId });
       });
     } catch (error) {
-      console.error(error);
+      console.error("Server error:", error);
       res.status(500).json({ message: "Server error", error: error.message });
     }
   }
 );
 
-app.listen(5000, () => console.log("🚀 Server running on port 5000"));
+// ---------- Start Server ----------
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

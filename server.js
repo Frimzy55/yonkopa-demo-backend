@@ -598,9 +598,9 @@ app.use("/uploads", express.static("uploads"));
 //GET all customers
 app.get("/api/customers/all", (req, res) => {
   const sql = `
-    SELECT id, kyc_code, firstName, middleName, lastName, dateOfBirth, gender,
+    SELECT id, kycCode, firstName, middleName, lastName, dateOfBirth, gender,
            mobileNumber, email, city, employmentStatus, monthlyIncome
-    FROM customers_kyc
+    FROM customer_kyc
     ORDER BY createdAt DESC
   `;
 
@@ -649,7 +649,7 @@ app.post("/api/verify-customer", (req, res) => {
       mobileNumber,
       dateOfBirth,
       nationalId
-    FROM customers_kyc
+    FROM customer_kyc
     WHERE mobileNumber = ? AND kycCode = ?
   `;
 
@@ -899,9 +899,11 @@ app.post("/api/loan/apply-loan", (req, res) => {
 const upload = multer({ storage });*/
 
  //POST /api/kyc/submit
+// backend route
 app.post(
   "/api/kyc/submit",
   upload.fields([
+    { name: "avatar", maxCount: 1 },
     { name: "payslip", maxCount: 1 },
     { name: "ghanaCardFront", maxCount: 1 },
     { name: "ghanaCardBack", maxCount: 1 },
@@ -911,21 +913,23 @@ app.post(
   (req, res) => {
     try {
       const data = req.body;
-      const files = req.files;
+      const files = req.files || {};
 
       const query = `
-        INSERT INTO customers_kyc (
-          title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
-          nationalId, taxId, residentialLocation, residentialLandmark, spouseName,
-          spouseContact, mobileNumber, email, residentialAddress, city, state, zipCode,
+        INSERT INTO customer_kyc (
+          kycCode, avatar, title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
+          nationalId, taxId, residentialLocation, residentialLandmark, spouseName, spouseContact,
+          mobileNumber, email, residentialAddress, city, state, zipCode,
           employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment,
           workPlaceLocation, businessName, businessType, monthlyBusinessIncome,
           businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness,
-          workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture, createdAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const values = [
+        data.kycCode || null,
+        files.avatar?.[0]?.filename || null,
         data.title || null,
         data.firstName || null,
         data.middleName || null,
@@ -964,26 +968,33 @@ app.post(
         files.ghanaCardBack?.[0]?.filename || null,
         files.employmentId?.[0]?.filename || null,
         files.businessPicture?.[0]?.filename || null,
+        new Date()
       ];
 
       db.query(query, values, (err, result) => {
         if (err) {
           console.error("Insert error:", err);
-          return res.status(500).json({ message: "Failed to submit KYC", error: err.message });
+          return res.status(500).json({
+            message: "Failed to submit KYC",
+            error: err.message
+          });
         }
-        res.status(200).json({ message: "KYC submitted successfully" });
+
+        res.status(200).json({
+          message: "KYC submitted successfully",
+          id: result.insertId
+        });
       });
+
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Server error", error: error.message });
+      console.error("Server error:", error);
+      res.status(500).json({
+        message: "Server error",
+        error: error.message
+      });
     }
   }
 );
-
-
-
-
-
 
 app.post("/api/applications/submit-all", (req, res) => {
   const data = req.body;
