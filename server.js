@@ -71,6 +71,22 @@ const upload1 = multer({ storage: storage1 });
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use(bodyParser.urlencoded({ extended: true }));
+
+
+
+
+// File upload setup
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
+  },
+});
+const upload = multer({ storage });
 
 
 const db = mysql.createPool({
@@ -103,7 +119,7 @@ db.getConnection((err, connection) => {
 });
 
 // --- SIGNUP customer ENDPOINT ---
-app.post('/signup', async (req, res) => {
+/*app.post('/signup', async (req, res) => {
   const { fullName, email, phone, password, confirmPassword, role } = req.body;
 
   if (password !== confirmPassword) {
@@ -157,6 +173,89 @@ app.post('/signup', async (req, res) => {
           });
         }
       );
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+*/
+
+// --- SIGNUP customer ENDPOINT ---
+app.post('/signup', async (req, res) => {
+  const { fullName, email, phone, password, confirmPassword, role } = req.body;
+
+  // Check password match
+  if (password !== confirmPassword) {
+    return res.status(400).json({ message: "Passwords do not match" });
+  }
+
+  try {
+
+    // Clean phone number (remove spaces or dashes)
+    const cleanPhone = phone.replace(/\D/g, "");
+
+    // 1️⃣ Check if email or phone already exists
+    const checkUserSql = "SELECT email, phone FROM users WHERE email = ? OR phone = ?";
+
+    db.query(checkUserSql, [email, cleanPhone], async (err, results) => {
+
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({ message: "Database error" });
+      }
+
+      if (results.length > 0) {
+
+        const existingUser = results[0];
+
+        if (existingUser.email === email) {
+          return res.status(400).json({
+            message: "Email already registered. Please login."
+          });
+        }
+
+        if (existingUser.phone === cleanPhone) {
+          return res.status(400).json({
+            message: "Phone number already registered."
+          });
+        }
+
+      }
+
+      // 2️⃣ Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const userRole = role || "customer";
+
+      // 3️⃣ Insert new user
+      const insertSql = `
+        INSERT INTO users (full_name, email, phone, password, role)
+        VALUES (?, ?, ?, ?, ?)
+      `;
+
+      db.query(
+        insertSql,
+        [fullName, email, cleanPhone, hashedPassword, userRole],
+        (err, result) => {
+
+          if (err) {
+            console.error("Insert error:", err);
+            return res.status(500).json({
+              message: "Error creating account"
+            });
+          }
+
+          res.status(201).json({
+            message: "Account created successfully!",
+            role: userRole
+          });
+
+        }
+      );
+
     });
 
   } catch (err) {
@@ -543,7 +642,7 @@ app.post("/api/verify-customer", (req, res) => {
   const query = `
     SELECT 
       id,
-      kyc_code,
+      kycCode,
       firstName,
       lastName,
       email,
@@ -551,7 +650,7 @@ app.post("/api/verify-customer", (req, res) => {
       dateOfBirth,
       nationalId
     FROM customers_kyc
-    WHERE mobileNumber = ? AND kyc_code = ?
+    WHERE mobileNumber = ? AND kycCode = ?
   `;
 
   db.query(query, [phone, kycCode], (err, results) => {
@@ -664,25 +763,7 @@ app.delete("/users/:id", (req, res) => {
 
 
 
-// GET all users with optional search
-/*app.get("/userss", (req, res) => {
-  const { search } = req.query;
-  let sql = "SELECT id, full_name, email, phone, role, created_at FROM users";
 
-  if (search) {
-    sql += " WHERE full_name LIKE ? OR role LIKE ?";
-    const searchTerm = `%${search}%`;
-    db.query(sql, [searchTerm, searchTerm], (err, results) => {
-      if (err) return res.status(500).json(err);
-      res.json(results);
-    });
-  } else {
-    db.query(sql, (err, results) => {
-      if (err) return res.status(500).json(err);
-      res.json(results);
-    });
-  }
-});*/
 
 
 
@@ -811,102 +892,95 @@ app.post("/api/loan/apply-loan", (req, res) => {
 
 
 // ✅ Multer setup for file uploads
-const storage = multer.diskStorage({
+/*const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname)
 });
-const upload = multer({ storage });
+const upload = multer({ storage });*/
 
-
-
-
-
+ //POST /api/kyc/submit
 app.post(
-  "/kyc/submit",
+  "/api/kyc/submit",
   upload.fields([
-    { name: "idDocument", maxCount: 1 },
-    { name: "addressProof", maxCount: 1 },
-    { name: "incomeProof", maxCount: 1 }
+    { name: "payslip", maxCount: 1 },
+    { name: "ghanaCardFront", maxCount: 1 },
+    { name: "ghanaCardBack", maxCount: 1 },
+    { name: "employmentId", maxCount: 1 },
+    { name: "businessPicture", maxCount: 1 },
   ]),
   (req, res) => {
-    const data = req.body;
-    const files = req.files;
+    try {
+      const data = req.body;
+      const files = req.files;
 
-    // Validate National ID format: GHA-123456789-0
-    const nationalIdPattern = /^GHA-\d{9}-\d$/;
-    if (!nationalIdPattern.test(data.nationalId)) {
-      return res.status(400).json({
-        message: "National ID must be in the format GHA-123456789-0"
-      });
-    }
-
-    // Check for duplicate national ID
-    const checkSql = "SELECT id FROM customers_kyc WHERE nationalId = ?";
-    db.query(checkSql, [data.nationalId], (err, results) => {
-      if (err) {
-        console.error("Database query error:", err);
-        return res.status(500).json({ message: "Server error" });
-      }
-
-      if (results.length > 0) {
-        return res.status(400).json({
-          message: "National ID already exists in the database"
-        });
-      }
-
-      // Insert KYC data
-      const sql = `
+      const query = `
         INSERT INTO customers_kyc (
-          firstName, middleName, lastName, dateOfBirth, gender, nationality,
-          maritalStatus, nationalId, passportNumber, taxId, mobileNumber,
-          email, residentialAddress, city, state, zipCode, postalAddress,
-          employmentStatus, employerName, jobTitle, monthlyIncome,
-          businessType, yearsInCurrentEmployment, bankName, bankAccountNumber,
-          accountType, branch, loanPurpose, existingLoans,
-          idDocument, addressProof, incomeProof
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
+          nationalId, taxId, residentialLocation, residentialLandmark, spouseName,
+          spouseContact, mobileNumber, email, residentialAddress, city, state, zipCode,
+          employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment,
+          workPlaceLocation, businessName, businessType, monthlyBusinessIncome,
+          businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness,
+          workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const values = [
-        data.firstName, data.middleName, data.lastName, data.dateOfBirth, data.gender,
-        data.nationality, data.maritalStatus, data.nationalId, data.passportNumber, data.taxId,
-        data.mobileNumber, data.email, data.residentialAddress, data.city, data.state,
-        data.zipCode, data.postalAddress, data.employmentStatus, data.employerName,
-        data.jobTitle, data.monthlyIncome, data.businessType, data.yearsInCurrentEmployment,
-        data.bankName, data.bankAccountNumber, data.accountType, data.branch,
-        data.loanPurpose, data.existingLoans,
-        files?.idDocument?.[0]?.filename || null,
-        files?.addressProof?.[0]?.filename || null,
-        files?.incomeProof?.[0]?.filename || null
+        data.title || null,
+        data.firstName || null,
+        data.middleName || null,
+        data.lastName || null,
+        data.dateOfBirth || null,
+        data.gender || null,
+        data.maritalStatus || null,
+        data.nationalId || null,
+        data.taxId || null,
+        data.residentialLocation || null,
+        data.residentialLandmark || null,
+        data.spouseName || null,
+        data.spouseContact || null,
+        data.mobileNumber || null,
+        data.email || null,
+        data.residentialAddress || null,
+        data.city || null,
+        data.state || null,
+        data.zipCode || null,
+        data.employmentStatus || null,
+        data.employerName || null,
+        data.jobTitle || null,
+        data.monthlyIncome || null,
+        data.yearsInCurrentEmployment || null,
+        data.workPlaceLocation || null,
+        data.businessName || null,
+        data.businessType || null,
+        data.monthlyBusinessIncome || null,
+        data.businessLocation || null,
+        data.businessGpsAddress || null,
+        data.numberOfWorkers || null,
+        data.yearsInBusiness || null,
+        data.workingCapital || null,
+        files.payslip?.[0]?.filename || null,
+        files.ghanaCardFront?.[0]?.filename || null,
+        files.ghanaCardBack?.[0]?.filename || null,
+        files.employmentId?.[0]?.filename || null,
+        files.businessPicture?.[0]?.filename || null,
       ];
 
-      db.query(sql, values, (err2, result) => {
-        if (err2) {
-          console.error("Database insert error:", err2);
-          return res.status(500).json({ message: "Database error", error: err2 });
+      db.query(query, values, (err, result) => {
+        if (err) {
+          console.error("Insert error:", err);
+          return res.status(500).json({ message: "Failed to submit KYC", error: err.message });
         }
-
-        // Generate KYC code
-        const kycCode = String(result.insertId).padStart(5, "0");
-
-        // Update KYC code
-        const updateSql = `UPDATE customers_kyc SET kyc_code = ? WHERE id = ?`;
-        db.query(updateSql, [kycCode, result.insertId], (err3) => {
-          if (err3) {
-            console.error("Error updating KYC code:", err3);
-            return res.status(500).json({ message: "Failed to update KYC code" });
-          }
-
-          return res.json({
-            message: "KYC submitted successfully!",
-            id: result.insertId,
-            kycCode
-          });
-        });
+        res.status(200).json({ message: "KYC submitted successfully" });
       });
-    });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
   }
 );
+
+
 
 
 
