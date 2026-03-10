@@ -641,14 +641,7 @@ app.post("/api/verify-customer", (req, res) => {
 
   const query = `
     SELECT 
-      id,
-      kycCode,
-      firstName,
-      lastName,
-      email,
-      mobileNumber,
-      dateOfBirth,
-      nationalId
+      *
     FROM customer_kyc
     WHERE mobileNumber = ? AND kycCode = ?
   `;
