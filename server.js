@@ -709,7 +709,7 @@ app.get("/users/:id", (req, res) => {
 app.post("/users", async (req, res) => {
   const { full_name, email, phone, password, role } = req.body;
 
-  // Hash password
+  // Hash 
   const hashedPassword = await bcrypt.hash(password, 10);
 
   const sql = "INSERT INTO users (full_name, email, phone, password, role) VALUES (?, ?, ?, ?, ?)";
