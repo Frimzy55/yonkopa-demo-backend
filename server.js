@@ -843,7 +843,7 @@ app.delete("/api/loans/delete/:id", (req, res) => {
 
 
 
-app.post("/api/loan/apply-loan", (req, res) => {
+app.post("/api/loan/apply-loan1", (req, res) => {
   const formData = { ...req.body };
 
   // List of allowed columns in loans table
@@ -1007,43 +1007,45 @@ app.get("/api/kyc/checks-national-id", (req, res) => {
 
 
 
-
-// Loan application route
 app.post("/api/loan/apply-loan", upload.any(), (req, res) => {
-  const data = JSON.parse(req.body.formData); // formData comes as string from frontend
-  // Map uploaded files
-  req.files.forEach(file => {
-    data[file.fieldname] = file.path; // store file path in DB
-  });
+  try {
+    const data = { ...req.body };
 
-  const sql = `INSERT INTO loan_applications (
-    fullName, phone, email, kycCode, dob, gender, nationalId, maritalStatus,
-    dependents, residentialAddress, residentialGPS, employmentStatus,
-    loanAmount, loanPurpose, loanTerm, repaymentFrequency, ratePerAnnum,
-    guarantorName, guarantorPhone, guarantorAddress, guarantorResidenceLocation,
-    guarantorIdNumber, guarantorEmployeeType, guarantorRank, guarantorWorkLocation,
-    guarantorNameOfEmployer, guarantorYearsInService, guarantorPayslip,
-    guarantorGhanaCardFront, guarantorGhanaCardBack, guarantorBusinessName,
-    guarantorBusinessLocation, guarantorYearsInBusiness, guarantorBusinessPicture
-  ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+    req.files.forEach(file => {
+      data[file.fieldname] = file.path; // store uploaded file paths
+    });
 
-  const values = [
-    data.fullName, data.phone, data.email, data.kycCode, data.dob, data.gender, data.nationalId, data.maritalStatus,
-    data.dependents, data.residentialAddress, data.residentialGPS, data.employmentStatus,
-    data.loanAmount, data.loanPurpose, data.loanTerm, data.repaymentFrequency, data.ratePerAnnum,
-    data.guarantorName, data.guarantorPhone, data.guarantorAddress, data.guarantorResidenceLocation,
-    data.guarantorIdNumber, data.guarantorEmployeeType, data.guarantorRank, data.guarantorWorkLocation,
-    data.guarantorNameOfEmployer, data.guarantorYearsInService, data.guarantorPayslip,
-    data.guarantorGhanaCardFront, data.guarantorGhanaCardBack, data.guarantorBusinessName,
-    data.guarantorBusinessLocation, data.guarantorYearsInBusiness, data.guarantorBusinessPicture
-  ];
+    const sql = `INSERT INTO loan_applications (
+      fullName, phone, email, kycCode, dob, gender, nationalId, maritalStatus,
+      dependents, residentialAddress, residentialGPS, employmentStatus,
+      loanAmount, loanPurpose, loanTerm, repaymentFrequency, ratePerAnnum,
+      guarantorName, guarantorPhone, guarantorAddress, guarantorResidenceLocation,
+      guarantorIdNumber, guarantorEmployeeType, guarantorRank, guarantorWorkLocation,
+      guarantorNameOfEmployer, guarantorYearsInService, guarantorPayslip,
+      guarantorGhanaCardFront, guarantorGhanaCardBack, guarantorBusinessName,
+      guarantorBusinessLocation, guarantorYearsInBusiness, guarantorBusinessPicture
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
-  db.query(sql, values, (err, result) => {
-    if (err) return res.status(500).json({ success: false, error: err.message });
-    res.json({ success: true, id: result.insertId });
-  });
+    const values = [
+      data.fullName, data.phone, data.email, data.kycCode, data.dob, data.gender, data.nationalId, data.maritalStatus,
+      data.dependents, data.residentialAddress, data.residentialGPS, data.employmentStatus,
+      data.loanAmount, data.loanPurpose, data.loanTerm, data.repaymentFrequency, data.ratePerAnnum,
+      data.guarantorName, data.guarantorPhone, data.guarantorAddress, data.guarantorResidenceLocation,
+      data.guarantorIdNumber, data.guarantorEmployeeType, data.guarantorRank, data.guarantorWorkLocation,
+      data.guarantorNameOfEmployer, data.guarantorYearsInService, data.guarantorPayslip,
+      data.guarantorGhanaCardFront, data.guarantorGhanaCardBack, data.guarantorBusinessName,
+      data.guarantorBusinessLocation, data.guarantorYearsInBusiness, data.guarantorBusinessPicture
+    ];
+
+    db.query(sql, values, (err, result) => {
+      if (err) return res.status(500).json({ success: false, error: err.message });
+      res.json({ success: true, id: result.insertId });
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
-
 
 
 
