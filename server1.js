@@ -1,148 +1,86 @@
-// server.js
+// server1.js (ES module)
 import express from "express";
 import mysql from "mysql2";
-import multer from "multer";
 import cors from "cors";
-import dotenv from "dotenv";
+import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
 
-dotenv.config();
-
+// Needed to get __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-
-// Enable CORS
 app.use(cors());
-
-// Parse JSON bodies (for non-file fields)
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded files statically
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-// ---------- MySQL Connection ----------
-const db = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-});
-
-db.getConnection((err, conn) => {
-  if (err) {
-    console.error("Database connection failed:", err);
-  } else {
-    console.log("✅ Connected to MySQL database");
-    conn.release();
-  }
-});
-
-// ---------- Multer Setup for File Uploads ----------
+// Multer setup for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "./uploads"); // folder where files are stored
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  },
+  destination: (req, file, cb) => cb(null, path.join(__dirname, "uploads")),
+  filename: (req, file, cb) => cb(null, Date.now() + "_" + file.originalname),
 });
-
 const upload = multer({ storage });
 
-// ---------- KYC Submit Route ----------
-app.post(
-  "/api/kyc/submit",
-  upload.fields([
-    { name: "avatar", maxCount: 1 },
-    { name: "payslip", maxCount: 1 },
-    { name: "ghanaCardFront", maxCount: 1 },
-    { name: "ghanaCardBack", maxCount: 1 },
-    { name: "employmentId", maxCount: 1 },
-    { name: "businessPicture", maxCount: 1 },
-  ]),
-  (req, res) => {
-    try {
-      const data = req.body;
-      const files = req.files;
+// MySQL connection
+const db = mysql.createConnection({
+  host: "localhost",
+  user: "root",
+  password: "Bench123$qwert",
+  database: "yonkopa1",
+});
 
-     const query = `
-INSERT INTO customer_kyc (
-  kycCode, avatar, title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
-  nationalId, taxId, residentialLocation, residentialLandmark, spouseName, spouseContact,
-  mobileNumber, email, residentialAddress, city, state, zipCode,
-  employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment,
-  workPlaceLocation, businessName, businessType, monthlyBusinessIncome,
-  businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness,
-  workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture,
-  createdAt
-) VALUES (
-  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-)
-`;
+// Test connection
+db.connect((err) => {
+  if (err) throw err;
+  console.log("Connected to MySQL!");
+});
 
-      const values = [
-        data.kycCode || null,
-        files.avatar?.[0]?.filename || null,
-        data.title || null,
-        data.firstName || null,
-        data.middleName || null,
-        data.lastName || null,
-        data.dateOfBirth || null,
-        data.gender || null,
-        data.maritalStatus || null,
-        data.nationalId || null,
-        data.taxId || null,
-        data.residentialLocation || null,
-        data.residentialLandmark || null,
-        data.spouseName || null,
-        data.spouseContact || null,
-        data.mobileNumber || null,
-        data.email || null,
-        data.residentialAddress || null,
-        data.city || null,
-        data.state || null,
-        data.zipCode || null,
-        data.employmentStatus || null,
-        data.employerName || null,
-        data.jobTitle || null,
-        data.monthlyIncome || null,
-        data.yearsInCurrentEmployment || null,
-        data.workPlaceLocation || null,
-        data.businessName || null,
-        data.businessType || null,
-        data.monthlyBusinessIncome || null,
-        data.businessLocation || null,
-        data.businessGpsAddress || null,
-        data.numberOfWorkers || null,
-        data.yearsInBusiness || null,
-        data.workingCapital || null,
-        files.payslip?.[0]?.filename || null,
-        files.ghanaCardFront?.[0]?.filename || null,
-        files.ghanaCardBack?.[0]?.filename || null,
-        files.employmentId?.[0]?.filename || null,
-        files.businessPicture?.[0]?.filename || null,
-        new Date(),
-      ];
+// Loan submission endpoint
+app.post("/apply-loan", upload.fields([
+  { name: "guarantorProfilePicture" },
+  { name: "guarantorPayslip" },
+  { name: "guarantorGhanaCardFront" },
+  { name: "guarantorGhanaCardBack" },
+  { name: "guarantorBusinessPicture" },
+]), (req, res) => {
+  const body = req.body;
+  const files = req.files;
 
-      db.query(query, values, (err, result) => {
-        if (err) {
-          console.error("Insert error:", err);
-          return res.status(500).json({ message: "Failed to submit KYC", error: err.message });
-        }
-        res.status(200).json({ message: "KYC submitted successfully", id: result.insertId });
-      });
-    } catch (error) {
-      console.error("Server error:", error);
-      res.status(500).json({ message: "Server error", error: error.message });
+  const query = `
+    INSERT INTO loan_applications (
+      fullName, phone, email, kycCode, dob, gender, nationalId, maritalStatus, dependents,
+      residentialAddress, residentialGPS, employmentStatus, loanAmount, loanPurpose, loanTerm,
+      repaymentFrequency, ratePerAnnum, interest, totalInterest, numberOfPayments, monthlyPayment,
+      loanFees, guarantorName, guarantorPhone, guarantorAddress, guarantorResidenceLocation,
+      guarantorIdNumber, guarantorEmployeeType, guarantorRank, guarantorWorkLocation, guarantorNameOfEmployer,
+      guarantorYearsInService, guarantorPayslip, guarantorGhanaCardFront, guarantorGhanaCardBack,
+      guarantorBusinessName, guarantorBusinessLocation, guarantorYearsInBusiness, guarantorBusinessPicture,
+      guarantorProfilePicture
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  const values = [
+    body.fullName, body.phone, body.email, body.kycCode, body.dob, body.gender, body.nationalId, body.maritalStatus, body.dependents,
+    body.residentialAddress, body.residentialGPS, body.employmentStatus, body.loanAmount, body.loanPurpose, body.loanTerm,
+    body.repaymentFrequency, body.ratePerAnnum, body.interest, body.totalInterest, body.numberOfPayments, body.monthlyPayment,
+    body.loanFees, body.guarantorName, body.guarantorPhone, body.guarantorAddress, body.guarantorResidenceLocation,
+    body.guarantorIdNumber, body.guarantorEmployeeType, body.guarantorRank, body.guarantorWorkLocation, body.guarantorNameOfEmployer,
+    body.guarantorYearsInService,
+    files?.guarantorPayslip?.[0]?.filename || null,
+    files?.guarantorGhanaCardFront?.[0]?.filename || null,
+    files?.guarantorGhanaCardBack?.[0]?.filename || null,
+    body.guarantorBusinessName, body.guarantorBusinessLocation, body.guarantorYearsInBusiness,
+    files?.guarantorBusinessPicture?.[0]?.filename || null,
+    files?.guarantorProfilePicture?.[0]?.filename || null,
+  ];
+
+  db.query(query, values, (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.json({ success: false, message: err.message });
     }
-  }
-);
+    res.json({ success: true, message: "Loan submitted!" });
+  });
+});
 
-// ---------- Start Server ----------
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(5000, () => console.log("Server running on port 5000"));

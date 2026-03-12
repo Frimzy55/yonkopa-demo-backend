@@ -1006,48 +1006,79 @@ app.get("/api/kyc/checks-national-id", (req, res) => {
 
 
 
+//Loan submission endpoint
+app.post("/apply-loan", upload.fields([
+  { name: "guarantorProfilePicture" },
+  { name: "guarantorPayslip" },
+  { name: "guarantorGhanaCardFront" },
+  { name: "guarantorGhanaCardBack" },
+  { name: "guarantorBusinessPicture" },
+]), (req, res) => {
+  const body = req.body;
+  const files = req.files;
 
-app.post("/api/loan/apply-loan", upload.any(), (req, res) => {
-  try {
-    const data = { ...req.body };
-
-    req.files.forEach(file => {
-      data[file.fieldname] = file.path; // store uploaded file paths
-    });
-
-    const sql = `INSERT INTO loan_applications (
-      fullName, phone, email, kycCode, dob, gender, nationalId, maritalStatus,
-      dependents, residentialAddress, residentialGPS, employmentStatus,
-      loanAmount, loanPurpose, loanTerm, repaymentFrequency, ratePerAnnum,
-      guarantorName, guarantorPhone, guarantorAddress, guarantorResidenceLocation,
-      guarantorIdNumber, guarantorEmployeeType, guarantorRank, guarantorWorkLocation,
-      guarantorNameOfEmployer, guarantorYearsInService, guarantorPayslip,
-      guarantorGhanaCardFront, guarantorGhanaCardBack, guarantorBusinessName,
-      guarantorBusinessLocation, guarantorYearsInBusiness, guarantorBusinessPicture
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
-
-    const values = [
-      data.fullName, data.phone, data.email, data.kycCode, data.dob, data.gender, data.nationalId, data.maritalStatus,
-      data.dependents, data.residentialAddress, data.residentialGPS, data.employmentStatus,
-      data.loanAmount, data.loanPurpose, data.loanTerm, data.repaymentFrequency, data.ratePerAnnum,
-      data.guarantorName, data.guarantorPhone, data.guarantorAddress, data.guarantorResidenceLocation,
-      data.guarantorIdNumber, data.guarantorEmployeeType, data.guarantorRank, data.guarantorWorkLocation,
-      data.guarantorNameOfEmployer, data.guarantorYearsInService, data.guarantorPayslip,
-      data.guarantorGhanaCardFront, data.guarantorGhanaCardBack, data.guarantorBusinessName,
-      data.guarantorBusinessLocation, data.guarantorYearsInBusiness, data.guarantorBusinessPicture
-    ];
-
-    db.query(sql, values, (err, result) => {
-      if (err) return res.status(500).json({ success: false, error: err.message });
-      res.json({ success: true, id: result.insertId });
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, error: err.message });
-  }
+  const query = `
+    INSERT INTO loan_applications (
+      fullName, phone, email, kycCode, dob, gender, nationalId, maritalStatus, dependents,
+      residentialAddress, residentialGPS, employmentStatus, loanAmount, loanPurpose, loanTerm,
+      repaymentFrequency, ratePerAnnum, interest, totalInterest, numberOfPayments, monthlyPayment,
+      loanFees, guarantorName, guarantorPhone, guarantorAddress, guarantorResidenceLocation,
+      guarantorIdNumber, guarantorEmployeeType, guarantorRank, guarantorWorkLocation, guarantorNameOfEmployer,
+      guarantorYearsInService, guarantorPayslip, guarantorGhanaCardFront, guarantorGhanaCardBack,
+      guarantorBusinessName, guarantorBusinessLocation, guarantorYearsInBusiness, guarantorBusinessPicture,
+      guarantorProfilePicture
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+const values = [
+  body.fullName || null,
+  body.phone || null,
+  body.email || null,
+  body.kycCode || null,
+  body.dob || null,
+  body.gender || null,
+  body.nationalId || null,
+  body.maritalStatus || null,
+  body.dependents ? parseInt(body.dependents) : 0, // <-- convert empty to 0
+  body.residentialAddress || null,
+  body.residentialGPS || null,
+  body.employmentStatus || null,
+  body.loanAmount ? parseFloat(body.loanAmount) : 0,
+  body.loanPurpose || null,
+  body.loanTerm ? parseInt(body.loanTerm) : 0,
+  body.repaymentFrequency || null,
+  body.ratePerAnnum ? parseFloat(body.ratePerAnnum) : 0,
+  body.interest ? parseFloat(body.interest) : 0,
+  body.totalInterest ? parseFloat(body.totalInterest) : 0,
+  body.numberOfPayments ? parseInt(body.numberOfPayments) : 0,
+  body.monthlyPayment ? parseFloat(body.monthlyPayment) : 0,
+  body.loanFees ? parseFloat(body.loanFees) : 0,
+  body.guarantorName || null,
+  body.guarantorPhone || null,
+  body.guarantorAddress || null,
+  body.guarantorResidenceLocation || null,
+  body.guarantorIdNumber || null,
+  body.guarantorEmployeeType || null,
+  body.guarantorRank || null,
+  body.guarantorWorkLocation || null,
+  body.guarantorNameOfEmployer || null,
+  body.guarantorYearsInService ? parseInt(body.guarantorYearsInService) : 0,
+  files?.guarantorPayslip?.[0]?.filename || null,
+  files?.guarantorGhanaCardFront?.[0]?.filename || null,
+  files?.guarantorGhanaCardBack?.[0]?.filename || null,
+  body.guarantorBusinessName || null,
+  body.guarantorBusinessLocation || null,
+  body.guarantorYearsInBusiness ? parseInt(body.guarantorYearsInBusiness) : 0,
+  files?.guarantorBusinessPicture?.[0]?.filename || null,
+  files?.guarantorProfilePicture?.[0]?.filename || null,
+];
+  db.query(query, values, (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.json({ success: false, message: err.message });
+    }
+    res.json({ success: true, message: "Loan submitted!" });
+  });
 });
-
-
 
 
 
