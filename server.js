@@ -632,6 +632,29 @@ app.get("/api/customers/all", (req, res) => {
   });
 });*/
 
+// GET ALL LOAN APPLICATIONS
+app.get("/api/admin/loan-progress", (req, res) => {
+
+  const sql = `
+    SELECT 
+     *
+    FROM loan_applications
+    ORDER BY createdAt DESC
+  `;
+
+  db.query(sql, (err, results) => {
+
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    res.json(results);
+
+  });
+
+});
+
 
 
 
