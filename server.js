@@ -12,6 +12,11 @@ import { fileURLToPath } from "url";
 import multer from "multer";
 import { connect } from 'http2';
 //import fs from "fs";
+//import http from "http";
+//import { Server } from "socket.io";
+
+//import loanRoutes from "./routes/loanRoutes.js";
+
 
 // ✅ Load environment variables
 dotenv.config();
@@ -35,35 +40,20 @@ app.use(bodyParser.json());
 app.use(express.json());
 
 
+//import cors from "cors";
 
-// Set storage for uploaded pictures
-/*const storage1 = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = "uploads/staff_pictures";
-    fs.mkdirSync(uploadDir, { recursive: true });
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // unique filename: timestamp + original name
-    cb(null, Date.now() + path.extname(file.originalname));
-  },
-});
+/*app.use(cors({
+  origin: "http://localhost:3000", // during development
+  credentials: true
+}));
 
-//const upload1 = multer({ storage1 });
-const upload1 = multer({ storage: storage1 });
-
+app.use(cors({
+  origin: "https://your-frontend-domain.com",
+  credentials: true
+}));
 */
 
-// ✅ MySQL Connection using env variables
-/*const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT,
-  
-  
-});*/
+
 
 
 
@@ -118,71 +108,58 @@ db.getConnection((err, connection) => {
   }
 });
 
-// --- SIGNUP customer ENDPOINT ---
-/*app.post('/signup', async (req, res) => {
-  const { fullName, email, phone, password, confirmPassword, role } = req.body;
 
-  if (password !== confirmPassword) {
-    return res.status(400).json({ message: 'Passwords do not match' });
-  }
 
-  try {
-    // 1️⃣ Check if email or phone already exists
-    const checkUserSql = "SELECT * FROM users WHERE email = ? OR phone = ?";
 
-    db.query(checkUserSql, [email, phone], async (err, results) => {
-      if (err) {
-        console.error("Database error:", err);
-        return res.status(500).json({ message: "Database error" });
-      }
 
-      if (results.length > 0) {
-        // Check which field already exists
-        const existingUser = results[0];
-        if (existingUser.email === email) {
-          return res.status(400).json({
-            message: "Email already exists. Please login instead."
-          });
-        } else if (existingUser.phone === phone) {
-          return res.status(400).json({
-            message: "Phone number already exists. Please use another."
-          });
-        }
-      }
 
-      // 2️⃣ Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const userRole = role || "customer";
+/*const server = http.createServer(app);
 
-      // 3️⃣ Insert new user
-      const insertSql =
-        "INSERT INTO users (full_name, email, phone, password, role) VALUES (?, ?, ?, ?, ?)";
-
-      db.query(
-        insertSql,
-        [fullName, email, phone, hashedPassword, userRole],
-        (err, result) => {
-          if (err) {
-            console.error("Insert error:", err);
-            return res.status(500).json({ message: "Error creating account" });
-          }
-
-          res.status(201).json({
-            message: "Account created successfully!",
-            role: userRole
-          });
-        }
-      );
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000", // or your frontend URL
+  },
 });
+
+app.set("io", io);*/
+
+
+
+
+
+
+/*const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000", // change to your frontend URL in production
+  },
+});
+
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+  // User joins their own room using userId
+  socket.on("joinRoom", (userId) => {
+    socket.join(userId);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected");
+  });
+});
+
+// Make io accessible in routes
+app.set("io", io);
+//app.use("/api/loan", loanRoutes);
+
 
 
 */
+
+
+
+
 
 // --- SIGNUP customer ENDPOINT ---
 app.post('/signup', async (req, res) => {
@@ -296,115 +273,6 @@ app.post('/signup1', async (req, res) => {
 
 
 
-// Create staff
-/*app.post("/signup2", upload1.single("picture"), (req, res) => {
-  const { full_name, email, phone, password, role } = req.body;
-  let picture_url = req.file ? req.file.path : null;
-
-  // Hash password
-  bcrypt.hash(password || "", 10)
-    .then((hashedPassword) => {
-      // Insert into DB
-      return db.execute(
-        `INSERT INTO user (full_name, email, phone, password, role, picture_url)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          full_name || null,
-          email || null,
-          phone || null,
-          hashedPassword || null,
-          role || null,
-          picture_url || null
-        ]
-      );
-    })
-    .then(([result]) => {
-      // Send response back
-      res.json({
-        id: result.insertId,
-        full_name,
-        email,
-        phone,
-        role,
-        picture_url,
-      });
-    })
-    .catch((err) => {
-      console.error(err);
-      res.status(500).json({ error: "Database or hashing error" });
-    });
-});
-// Update staff
-app.put("/user/:id", upload1.single("picture"), (req, res) => {
-  const { id } = req.params;
-  const { full_name, email, phone, password, role } = req.body;
-  let picture_url = null;
-
-  if (req.file) {
-    picture_url = req.file.path;
-  }
-
-  const fields = [];
-  const values = [];
-
-  if (full_name) { fields.push("full_name=?"); values.push(full_name); }
-  if (email) { fields.push("email=?"); values.push(email); }
-  if (phone) { fields.push("phone=?"); values.push(phone); }
-  if (role) { fields.push("role=?"); values.push(role); }
-  if (picture_url) { fields.push("picture_url=?"); values.push(picture_url); }
-
-  // If password is provided, hash it first
-  if (password) {
-    bcrypt.hash(password, 10)
-      .then((hashedPassword) => {
-        fields.push("password=?");
-        values.push(hashedPassword);
-
-        db.execute(`UPDATE user SET ${fields.join(", ")} WHERE id=?`, [...values, id])
-          .then(() => res.json({ message: "Staff updated successfully" }))
-          .catch((err) => {
-            console.error(err);
-            res.status(500).json({ error: "Database error" });
-          });
-      })
-      .catch((err) => {
-        console.error(err);
-        res.status(500).json({ error: "Error hashing password" });
-      });
-  } else {
-    // No password change
-    db.execute(`UPDATE user SET ${fields.join(", ")} WHERE id=?`, [...values, id])
-      .then(() => res.json({ message: "Staff updated successfully" }))
-      .catch((err) => {
-        console.error(err);
-        res.status(500).json({ error: "Database error" });
-      });
-  }
-});
-
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-
-
-
-// Get all staff
-app.get("/user", async (req, res) => {
-  const { role } = req.query;
-  try {
-    let sql = "SELECT * FROM user";
-    const params = [];
-    if (role) {
-      sql += " WHERE role=?";
-      params.push(role);
-    }
-    const [rows] = await db.execute(sql, params);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Database error" });
-  }
-});
-*/
 
 // --- LOGIN ENDPOINT ---
 // --- LOGIN ENDPOINT ---
@@ -690,7 +558,7 @@ app.post("/api/verify-customer", (req, res) => {
 
 
 
-app.get("/userss", (req, res) => {
+app.get("/userss",authenticateToken,(req, res) => {
   const sql = `
     SELECT id, full_name, email, phone, role, created_at
     FROM users
@@ -706,7 +574,7 @@ app.get("/userss", (req, res) => {
 
 
 
-app.get("/users", (req, res) => {
+app.get("/users",authenticateToken, (req, res) => {
   const sql = `
     SELECT id, full_name, email, phone, role, created_at
     FROM users
@@ -916,7 +784,7 @@ const upload = multer({ storage });*/
 
  //POST /api/kyc/submit
 // backend route
-app.post(
+/*app.post(
   "/api/kyc/submit",
   upload.fields([
     { name: "avatar", maxCount: 1 },
@@ -1010,7 +878,162 @@ app.post(
       });
     }
   }
+);   
+
+*/
+
+app.post(
+  "/api/kyc/submit",
+  upload.fields([
+    { name: "avatar", maxCount: 1 },
+    { name: "payslip", maxCount: 1 },
+    { name: "ghanaCardFront", maxCount: 1 },
+    { name: "ghanaCardBack", maxCount: 1 },
+    { name: "employmentId", maxCount: 1 },
+    { name: "businessPicture", maxCount: 1 },
+  ]),
+  (req, res) => {
+    try {
+
+      const data = req.body;
+      const files = req.files || {};
+
+      const query = `
+        INSERT INTO customer_kyc (
+          kycCode, avatar, title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
+          nationalId, taxId, residentialLocation, residentialLandmark, spouseName, spouseContact,
+          mobileNumber, email, residentialAddress, city, state, zipCode,
+          employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment,
+          workPlaceLocation, businessName, businessType, monthlyBusinessIncome,
+          businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness,
+          workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture, createdAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const values = [
+        data.kycCode || null,
+        files.avatar?.[0]?.filename || null,
+        data.title || null,
+        data.firstName || null,
+        data.middleName || null,
+        data.lastName || null,
+        data.dateOfBirth || null,
+        data.gender || null,
+        data.maritalStatus || null,
+        data.nationalId || null,
+        data.taxId || null,
+        data.residentialLocation || null,
+        data.residentialLandmark || null,
+        data.spouseName || null,
+        data.spouseContact || null,
+        data.mobileNumber || null,
+        data.email || null,
+        data.residentialAddress || null,
+        data.city || null,
+        data.state || null,
+        data.zipCode || null,
+        data.employmentStatus || null,
+        data.employerName || null,
+        data.jobTitle || null,
+        data.monthlyIncome || null,
+        data.yearsInCurrentEmployment || null,
+        data.workPlaceLocation || null,
+        data.businessName || null,
+        data.businessType || null,
+        data.monthlyBusinessIncome || null,
+        data.businessLocation || null,
+        data.businessGpsAddress || null,
+        data.numberOfWorkers || null,
+        data.yearsInBusiness || null,
+        data.workingCapital || null,
+        files.payslip?.[0]?.filename || null,
+        files.ghanaCardFront?.[0]?.filename || null,
+        files.ghanaCardBack?.[0]?.filename || null,
+        files.employmentId?.[0]?.filename || null,
+        files.businessPicture?.[0]?.filename || null,
+        new Date()
+      ];
+
+      db.query(query, values, (err, result) => {
+
+        if (err) {
+          console.error("Insert error:", err);
+          return res.status(500).json({
+            message: "Failed to submit KYC",
+            error: err.message
+          });
+        }
+
+        const kycId = result.insertId;
+
+        // 🔔 CREATE NOTIFICATION
+        const notificationQuery = `
+          INSERT INTO notifications (userId, message, type, createdAt)
+          VALUES (?, ?, ?, NOW())
+        `;
+
+        const notificationValues = [
+          kycId,
+          `KYC submitted successfully for ${data.firstName} ${data.lastName}`,
+          "KYC_SUBMITTED"
+        ];
+
+        db.query(notificationQuery, notificationValues, (notifyErr) => {
+
+          if (notifyErr) {
+            console.error("Notification error:", notifyErr);
+          }
+
+          res.status(200).json({
+            message: "KYC submitted successfully",
+            id: kycId
+          });
+
+        });
+
+      });
+
+    } catch (error) {
+
+      console.error("Server error:", error);
+
+      res.status(500).json({
+        message: "Server error",
+        error: error.message
+      });
+
+    }
+  }
 );
+
+
+
+
+app.get("/api/notifications/:userId", (req, res) => {
+
+  const { userId } = req.params;
+
+  const query = `
+    SELECT * FROM notifications
+    WHERE userId = ?
+    ORDER BY createdAt DESC
+  `;
+
+  db.query(query, [userId], (err, results) => {
+
+    if (err) {
+      return res.status(500).json({
+        message: "Failed to fetch notifications"
+      });
+    }
+
+    res.json(results);
+
+  });
+
+});
+
+
 
 
 
