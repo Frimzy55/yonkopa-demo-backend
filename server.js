@@ -709,7 +709,7 @@ app.get('/api/loan-applications/pending', (req, res) => {
 
 app.use("/uploads", express.static("uploads"));
 
-//app.use("/api/kyc", kycRoutes);
+
 
 //app.use("/api/loan", loanRoutes);
 
