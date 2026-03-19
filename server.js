@@ -906,8 +906,13 @@ app.post(
           employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment,
           workPlaceLocation, businessName, businessType, monthlyBusinessIncome,
           businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness,
-          workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture, createdAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture,
+          referenceName1, referencePhone1, referenceRelationship1,
+          referenceName2, referencePhone2, referenceRelationship2, createdAt
+
+          
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?)
       `;
 
       const values = [
@@ -951,6 +956,15 @@ app.post(
         files.ghanaCardBack?.[0]?.filename || null,
         files.employmentId?.[0]?.filename || null,
         files.businessPicture?.[0]?.filename || null,
+
+
+        // ✅ NEW REFERENCES
+       data.referenceName1 || null,
+       data.referencePhone1 || null,
+       data.referenceRelationship1 || null,
+       data.referenceName2 || null,
+       data.referencePhone2 || null,
+       data.referenceRelationship2 || null,
         new Date()
       ];
 
@@ -973,7 +987,8 @@ app.post(
         `;
 
         const notificationValues = [
-          kycId,
+         // kycId,
+         data.userId, // ✅ correct
           `KYC submitted successfully for ${data.firstName} ${data.lastName}`,
           "KYC_SUBMITTED"
         ];
