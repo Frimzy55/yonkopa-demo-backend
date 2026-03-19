@@ -978,18 +978,26 @@ app.post(
           });
         }
 
+       // const kycId = result.insertId;
+
+          // 🔥 Generate KYC CODE PROPERLY
         const kycId = result.insertId;
+       // const kycCode = `KYC-${kycId}`;
+        const kycCode = `${String(kycId).padStart(5, "0")}`;
 
         // 🔔 CREATE NOTIFICATION
         const notificationQuery = `
-          INSERT INTO notifications (userId, message, type, createdAt)
-          VALUES (?, ?, ?, NOW())
-        `;
+        INSERT INTO notification (userId, message, type, createdAt)
+           VALUES (?, ?, ?, NOW())
+         `;
 
         const notificationValues = [
          // kycId,
          data.userId, // ✅ correct
-          `KYC submitted successfully for ${data.firstName} ${data.lastName}`,
+
+         //data.kycCode || null, // ✅ NEW: include KYC code
+          //`KYC submitted successfully for ${data.firstName} ${data.lastName} ${data.kycCode}`,
+          `Hello  ${data.firstName} ${data.lastName} Your KYC code is ${kycCode}`,
           "KYC_SUBMITTED"
         ];
 
@@ -1029,7 +1037,7 @@ app.get("/api/notifications/:userId", (req, res) => {
   const { userId } = req.params;
 
   const query = `
-    SELECT * FROM notifications
+    SELECT * FROM notification
     WHERE userId = ?
     ORDER BY createdAt DESC
   `;
