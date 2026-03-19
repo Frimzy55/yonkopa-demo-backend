@@ -162,7 +162,7 @@ app.set("io", io);
 
 
 // --- SIGNUP customer ENDPOINT ---
-app.post('/signup', async (req, res) => {
+/*app.post('/signup', async (req, res) => {
   const { fullName, email, phone, password, confirmPassword, role } = req.body;
 
   // Check password match
@@ -233,6 +233,99 @@ app.post('/signup', async (req, res) => {
         }
       );
 
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});*/
+
+
+
+// --- SIGNUP customer ENDPOINT ---
+app.post('/signup', async (req, res) => {
+  const { fullName, identifier, password, confirmPassword, role } = req.body;
+
+  // Check password match
+  if (password !== confirmPassword) {
+    return res.status(400).json({ message: "Passwords do not match" });
+  }
+
+  try {
+    let email = null;
+    let phone = null;
+
+    // Detect if identifier is email or phone
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+    const isPhone = /^\d{10}$/.test(identifier.replace(/\D/g, ""));
+
+    if (isEmail) {
+      email = identifier;
+    } else if (isPhone) {
+      phone = identifier.replace(/\D/g, "");
+    } else {
+      return res.status(400).json({
+        message: "Enter a valid email or 10-digit phone number"
+      });
+    }
+
+    // Clean phone if exists
+    const cleanPhone = phone;
+
+    // 1️⃣ Check if user already exists
+    const checkUserSql =
+      "SELECT email, phone FROM users WHERE email = ? OR phone = ?";
+
+    db.query(checkUserSql, [email, cleanPhone], async (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({ message: "Database error" });
+      }
+
+      if (results.length > 0) {
+        const existingUser = results[0];
+
+        if (email && existingUser.email === email) {
+          return res.status(400).json({
+            message: "Email already registered. Please login."
+          });
+        }
+
+        if (cleanPhone && existingUser.phone === cleanPhone) {
+          return res.status(400).json({
+            message: "Phone number already registered."
+          });
+        }
+      }
+
+      // 2️⃣ Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const userRole = role || "customer";
+
+      // 3️⃣ Insert new user
+      const insertSql = `
+        INSERT INTO users (full_name, email, phone, password, role)
+        VALUES (?, ?, ?, ?, ?)
+      `;
+
+      db.query(
+        insertSql,
+        [fullName, email, cleanPhone, hashedPassword, userRole],
+        (err, result) => {
+          if (err) {
+            console.error("Insert error:", err);
+            return res.status(500).json({
+              message: "Error creating account"
+            });
+          }
+
+          res.status(201).json({
+            message: "Account created successfully!",
+            role: userRole
+          });
+        }
+      );
     });
 
   } catch (err) {
