@@ -977,7 +977,6 @@ const upload = multer({ storage });*/
 // ================================
 // KYC SUBMISSION + NOTIFICATION
 // ================================
-
 app.post(
   "/api/kyc/submit",
   upload.fields([
@@ -990,6 +989,7 @@ app.post(
   ]),
   (req, res) => {
     try {
+
       const data = req.body;
       const files = req.files || {};
 
@@ -1004,10 +1004,13 @@ app.post(
           workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture,
           referenceName1, referencePhone1, referenceRelationship1,
           referenceName2, referencePhone2, referenceRelationship2, createdAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+          
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?)
       `;
 
-      db.query(query, [
+      const values = [
         data.kycCode || null,
         files.avatar?.[0]?.filename || null,
         data.title || null,
@@ -1048,14 +1051,19 @@ app.post(
         files.ghanaCardBack?.[0]?.filename || null,
         files.employmentId?.[0]?.filename || null,
         files.businessPicture?.[0]?.filename || null,
-        data.referenceName1 || null,
-        data.referencePhone1 || null,
-        data.referenceRelationship1 || null,
-        data.referenceName2 || null,
-        data.referencePhone2 || null,
-        data.referenceRelationship2 || null,
+
+
+        // ✅ NEW REFERENCES
+       data.referenceName1 || null,
+       data.referencePhone1 || null,
+       data.referenceRelationship1 || null,
+       data.referenceName2 || null,
+       data.referencePhone2 || null,
+       data.referenceRelationship2 || null,
         new Date()
-      ], (err, result) => {
+      ];
+
+      db.query(query, values, (err, result) => {
 
         if (err) {
           console.error("Insert error:", err);
@@ -1065,24 +1073,31 @@ app.post(
           });
         }
 
-        const kycId = result.insertId;
-        const kycCode = String(kycId).padStart(5, "0");
+       // const kycId = result.insertId;
 
-        // ================================
-        // CREATE NOTIFICATION
-        // ================================
+          // 🔥 Generate KYC CODE PROPERLY
+        const kycId = result.insertId;
+       // const kycCode = `KYC-${kycId}`;
+        const kycCode = `${String(kycId).padStart(5, "0")}`;
+
+        // 🔔 CREATE NOTIFICATION
         const notificationQuery = `
-          INSERT INTO notification (userId, message, type, isRead, createdAt)
-          VALUES (?, ?, ?, 0, NOW())
-        `;
+        INSERT INTO notification (userId, message, type, createdAt)
+           VALUES (?, ?, ?, NOW())
+         `;
 
         const notificationValues = [
-          data.userId,
-          `Hello ${data.firstName} ${data.lastName}, your KYC code is ${kycCode}`,
+         // kycId,
+         data.userId, // ✅ correct
+
+         //data.kycCode || null, // ✅ NEW: include KYC code
+          //`KYC submitted successfully for ${data.firstName} ${data.lastName} ${data.kycCode}`,
+          `Hello  ${data.firstName} ${data.lastName} Your KYC code is ${kycCode}`,
           "KYC_SUBMITTED"
         ];
 
         db.query(notificationQuery, notificationValues, (notifyErr) => {
+
           if (notifyErr) {
             console.error("Notification error:", notifyErr);
           }
@@ -1091,38 +1106,40 @@ app.post(
             message: "KYC submitted successfully",
             id: kycId
           });
+
         });
 
       });
 
     } catch (error) {
+
       console.error("Server error:", error);
+
       res.status(500).json({
         message: "Server error",
         error: error.message
       });
+
     }
   }
 );
 
 
-// ================================
-// GET UNREAD NOTIFICATIONS
-// ================================
+
+
 app.get("/api/notifications/:userId", (req, res) => {
 
   const { userId } = req.params;
 
   const query = `
     SELECT * FROM notification
-    WHERE userId = ? AND isRead = 0
+    WHERE userId = ?
     ORDER BY createdAt DESC
   `;
 
   db.query(query, [userId], (err, results) => {
 
     if (err) {
-      console.error(err);
       return res.status(500).json({
         message: "Failed to fetch notifications"
       });
@@ -1135,35 +1152,6 @@ app.get("/api/notifications/:userId", (req, res) => {
 });
 
 
-// ================================
-// MARK NOTIFICATIONS AS READ
-// ================================
-app.put("/api/notifications/mark-read/:userId", (req, res) => {
-
-  const { userId } = req.params;
-
-  const query = `
-    UPDATE notification
-    SET isRead = 1
-    WHERE userId = ? AND isRead = 0
-  `;
-
-  db.query(query, [userId], (err) => {
-
-    if (err) {
-      console.error(err);
-      return res.status(500).json({
-        message: "Failed to mark notifications as read"
-      });
-    }
-
-    res.json({
-      message: "Notifications marked as read"
-    });
-
-  });
-
-});
 
 
 
