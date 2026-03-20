@@ -1126,6 +1126,33 @@ app.post(
 
 
 
+app.get("/api/customer-kyc/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  const query = `
+    SELECT avatar 
+    FROM customer_kyc 
+    WHERE id = ?
+    ORDER BY createdAt DESC 
+    LIMIT 1
+  `;
+
+  db.query(query, [userId], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Error fetching avatar" });
+    }
+
+    if (result.length === 0) {
+      return res.json({});
+    }
+
+    res.json(result[0]);
+  });
+});
+
+
+
 
 app.get("/api/notifications/:userId", (req, res) => {
 
@@ -1385,6 +1412,38 @@ app.post("/api/applications/submit-all", (req, res) => {
   });
 });
 
+
+
+
+
+
+
+
+
+app.get("/api/loan-status/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  const query = `
+    SELECT status 
+    FROM loan_applications
+    WHERE id= ?
+    ORDER BY createdAt DESC
+    LIMIT 1
+  `;
+
+  db.query(query, [userId], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Error fetching loan status" });
+    }
+
+    if (result.length === 0) {
+      return res.json({ status: "No Loan" });
+    }
+
+    res.json({ status: result[0].status });
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
