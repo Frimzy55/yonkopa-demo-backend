@@ -10,7 +10,8 @@ import dotenv from 'dotenv';   // ✅ ADD THIS
 import path from "path";
 import { fileURLToPath } from "url";
 import multer from "multer";
-import { connect } from 'http2';
+//import { connect } from 'http2';
+//import { useId } from 'react';
 //import fs from "fs";
 //import http from "http";
 //import { Server } from "socket.io";
@@ -45,13 +46,13 @@ app.use(express.json());
 /*app.use(cors({
   origin: "http://localhost:3000", // during development
   credentials: true
-}));
+}));*/
 
-app.use(cors({
-  origin: "https://your-frontend-domain.com",
+/*app.use(cors({
+  origin: "https://yonkopa-frontend.vercel.app/",
   credentials: true
-}));
-*/
+}));*/
+
 
 
 
@@ -61,6 +62,7 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+//app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 app.use(bodyParser.urlencoded({ extended: true }));
 
 
@@ -158,88 +160,6 @@ app.set("io", io);
 */
 
 
-
-
-
-// --- SIGNUP customer ENDPOINT ---
-/*app.post('/signup', async (req, res) => {
-  const { fullName, email, phone, password, confirmPassword, role } = req.body;
-
-  // Check password match
-  if (password !== confirmPassword) {
-    return res.status(400).json({ message: "Passwords do not match" });
-  }
-
-  try {
-
-    // Clean phone number (remove spaces or dashes)
-    const cleanPhone = phone.replace(/\D/g, "");
-
-    // 1️⃣ Check if email or phone already exists
-    const checkUserSql = "SELECT email, phone FROM users WHERE email = ? OR phone = ?";
-
-    db.query(checkUserSql, [email, cleanPhone], async (err, results) => {
-
-      if (err) {
-        console.error("Database error:", err);
-        return res.status(500).json({ message: "Database error" });
-      }
-
-      if (results.length > 0) {
-
-        const existingUser = results[0];
-
-        if (existingUser.email === email) {
-          return res.status(400).json({
-            message: "Email already registered. Please login."
-          });
-        }
-
-        if (existingUser.phone === cleanPhone) {
-          return res.status(400).json({
-            message: "Phone number already registered."
-          });
-        }
-
-      }
-
-      // 2️⃣ Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const userRole = role || "customer";
-
-      // 3️⃣ Insert new user
-      const insertSql = `
-        INSERT INTO users (full_name, email, phone, password, role)
-        VALUES (?, ?, ?, ?, ?)
-      `;
-
-      db.query(
-        insertSql,
-        [fullName, email, cleanPhone, hashedPassword, userRole],
-        (err, result) => {
-
-          if (err) {
-            console.error("Insert error:", err);
-            return res.status(500).json({
-              message: "Error creating account"
-            });
-          }
-
-          res.status(201).json({
-            message: "Account created successfully!",
-            role: userRole
-          });
-
-        }
-      );
-
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});*/
 
 
 
@@ -391,13 +311,13 @@ app.post('/login', (req, res) => {
 
 
     // Update status to 'online'
-    db.query("UPDATE users SET status='online', last_login=NOW() WHERE id=?", [user.id], (err2) => {
+    db.query("UPDATE users SET status='online', last_login=NOW() WHERE userId=?", [user.userId], (err2) => {
       if (err2) console.error("Error updating status:", err2);
     });
 
     // Create JWT token with role info
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { userId: user.userId, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '2h' }
     );
@@ -406,7 +326,7 @@ app.post('/login', (req, res) => {
       message: 'Login successful',
       token,
       user: {
-        id: user.id,
+        userId: user.userId,
         fullName: user.full_name,
         email: user.email,
         phone: user.phone,
@@ -578,20 +498,7 @@ app.get("/api/customers/all", (req, res) => {
 
 
 
-/*app.post("/api/verify-customer", async (req, res) => {
-  const { phone, kycCode } = req.body;
 
-  const query = "SELECT * FROM customers_kyc WHERE mobileNumber = ? AND kyc_code = ?";
-  db.query(query, [phone, kycCode], (err, results) => {
-    if (err) return res.status(500).json({ error: "Database error" });
-
-    if (results.length > 0) {
-      return res.json({ verified: true });
-    } else {
-      return res.json({ verified: false });
-    }
-  });
-});*/
 
 // GET ALL LOAN APPLICATIONS
 app.get("/api/admin/loan-progress", (req, res) => {
@@ -621,16 +528,16 @@ app.get("/api/admin/loan-progress", (req, res) => {
 
 
 app.post("/api/verify-customer", (req, res) => {
-  const { phone, kycCode } = req.body;
+  const { userId, kycCode } = req.body;
 
   const query = `
     SELECT 
       *
     FROM customer_kyc
-    WHERE mobileNumber = ? AND kycCode = ?
+    WHERE userId = ? AND kycCode = ?
   `;
 
-  db.query(query, [phone, kycCode], (err, results) => {
+  db.query(query, [userId, kycCode], (err, results) => {
     if (err) {
       console.error("Verify customer error:", err);
       return res.status(500).json({ error: "Database error" });
@@ -800,7 +707,7 @@ app.get('/api/loan-applications/pending', (req, res) => {
 });
 
 
-app.use("/uploads", express.static("uploads"));
+//app.use("/uploads", express.static("uploads"));
 
 
 
@@ -868,112 +775,7 @@ app.post("/api/loan/apply-loan1", (req, res) => {
 
 
 
-// ✅ Multer setup for file uploads
-/*const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname)
-});
-const upload = multer({ storage });*/
 
- //POST /api/kyc/submit
-// backend route
-/*app.post(
-  "/api/kyc/submit",
-  upload.fields([
-    { name: "avatar", maxCount: 1 },
-    { name: "payslip", maxCount: 1 },
-    { name: "ghanaCardFront", maxCount: 1 },
-    { name: "ghanaCardBack", maxCount: 1 },
-    { name: "employmentId", maxCount: 1 },
-    { name: "businessPicture", maxCount: 1 },
-  ]),
-  (req, res) => {
-    try {
-      const data = req.body;
-      const files = req.files || {};
-
-      const query = `
-        INSERT INTO customer_kyc (
-          kycCode, avatar, title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
-          nationalId, taxId, residentialLocation, residentialLandmark, spouseName, spouseContact,
-          mobileNumber, email, residentialAddress, city, state, zipCode,
-          employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment,
-          workPlaceLocation, businessName, businessType, monthlyBusinessIncome,
-          businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness,
-          workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture, createdAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
-
-      const values = [
-        data.kycCode || null,
-        files.avatar?.[0]?.filename || null,
-        data.title || null,
-        data.firstName || null,
-        data.middleName || null,
-        data.lastName || null,
-        data.dateOfBirth || null,
-        data.gender || null,
-        data.maritalStatus || null,
-        data.nationalId || null,
-        data.taxId || null,
-        data.residentialLocation || null,
-        data.residentialLandmark || null,
-        data.spouseName || null,
-        data.spouseContact || null,
-        data.mobileNumber || null,
-        data.email || null,
-        data.residentialAddress || null,
-        data.city || null,
-        data.state || null,
-        data.zipCode || null,
-        data.employmentStatus || null,
-        data.employerName || null,
-        data.jobTitle || null,
-        data.monthlyIncome || null,
-        data.yearsInCurrentEmployment || null,
-        data.workPlaceLocation || null,
-        data.businessName || null,
-        data.businessType || null,
-        data.monthlyBusinessIncome || null,
-        data.businessLocation || null,
-        data.businessGpsAddress || null,
-        data.numberOfWorkers || null,
-        data.yearsInBusiness || null,
-        data.workingCapital || null,
-        files.payslip?.[0]?.filename || null,
-        files.ghanaCardFront?.[0]?.filename || null,
-        files.ghanaCardBack?.[0]?.filename || null,
-        files.employmentId?.[0]?.filename || null,
-        files.businessPicture?.[0]?.filename || null,
-        new Date()
-      ];
-
-      db.query(query, values, (err, result) => {
-        if (err) {
-          console.error("Insert error:", err);
-          return res.status(500).json({
-            message: "Failed to submit KYC",
-            error: err.message
-          });
-        }
-
-        res.status(200).json({
-          message: "KYC submitted successfully",
-          id: result.insertId
-        });
-      });
-
-    } catch (error) {
-      console.error("Server error:", error);
-      res.status(500).json({
-        message: "Server error",
-        error: error.message
-      });
-    }
-  }
-);   
-
-*/
 // ================================
 // KYC SUBMISSION + NOTIFICATION
 // ================================
@@ -995,7 +797,7 @@ app.post(
 
       const query = `
         INSERT INTO customer_kyc (
-          kycCode, avatar, title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
+          userId,kycCode, avatar, title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
           nationalId, taxId, residentialLocation, residentialLandmark, spouseName, spouseContact,
           mobileNumber, email, residentialAddress, city, state, zipCode,
           employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment,
@@ -1006,11 +808,12 @@ app.post(
           referenceName2, referencePhone2, referenceRelationship2, createdAt
 
           
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ) VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?)
       `;
 
       const values = [
+         data.userId || null,
         data.kycCode || null,
         files.avatar?.[0]?.filename || null,
         data.title || null,
@@ -1129,28 +932,21 @@ app.post(
 app.get("/api/customer-kyc/:userId", (req, res) => {
   const { userId } = req.params;
 
-  const query = `
-    SELECT avatar 
-    FROM customer_kyc 
-    WHERE id = ?
-    ORDER BY createdAt DESC 
-    LIMIT 1
-  `;
+  const query = "SELECT avatar FROM customer_kyc WHERE userId = ?";
 
-  db.query(query, [userId], (err, result) => {
+  db.query(query, [userId], (err, results) => {
     if (err) {
-      console.error(err);
-      return res.status(500).json({ message: "Error fetching avatar" });
+      console.error("DB Error:", err);
+      return res.status(500).json({ error: "Server error" });
     }
 
-    if (result.length === 0) {
+    if (results.length === 0) {
       return res.json({});
     }
 
-    res.json(result[0]);
+    res.json(results[0]); // { avatar: "image.jpg" }
   });
 });
-
 
 
 
@@ -1178,6 +974,35 @@ app.get("/api/notifications/:userId", (req, res) => {
 
 });
 
+
+
+
+
+
+
+
+
+
+   //GET KYC BY USER ID
+
+app.get("/api/customer1-kyc/:userId", (req, res) => {
+  const userId = req.params.userId;
+
+  const sql = "SELECT * FROM customer_kyc WHERE userId = ?";
+
+  db.query(sql, [userId], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: "KYC not found" });
+    }
+
+    res.json(result[0]);
+  });
+});
 
 
 
@@ -1213,7 +1038,7 @@ app.post(
 
     // ✅ UPDATED COLUMNS (added momo fields at the end)
     const columns = [
-      "fullName", "phone", "email", "kycCode", "dob", "gender", "nationalId", "maritalStatus", "dependents",
+      "userId","fullName", "phone", "email", "kycCode", "dob", "gender", "nationalId", "maritalStatus", "dependents",
       "residentialAddress", "residentialGPS", "employmentStatus", "loanAmount", "loanPurpose", "loanTerm",
       "repaymentFrequency", "ratePerAnnum", "interest", "totalInterest", "numberOfPayments", "monthlyPayment",
       "loanFees", "guarantorName", "guarantorPhone", "guarantorAddress", "guarantorResidenceLocation",
@@ -1230,6 +1055,7 @@ app.post(
 
     // ✅ UPDATED VALUES (same order as columns)
     const values = [
+       body.userId || null,
       body.fullName || null,
       body.phone || null,
       body.email || null,
@@ -1418,15 +1244,14 @@ app.post("/api/applications/submit-all", (req, res) => {
 
 
 
-
-
+// Change from kycCode to userId
 app.get("/api/loan-status/:userId", (req, res) => {
   const { userId } = req.params;
 
   const query = `
     SELECT status 
     FROM loan_applications
-    WHERE id= ?
+    WHERE userId = ?
     ORDER BY createdAt DESC
     LIMIT 1
   `;
