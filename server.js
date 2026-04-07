@@ -877,7 +877,7 @@ app.get("/api/kyc/check/:userId", (req, res) => {
 
 
 
-//app.use("/api/loan", loanRoutes);
+
 
 
 
