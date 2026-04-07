@@ -34,7 +34,7 @@ const app = express();
 // ✅ Use env port
 const PORT = process.env.PORT || 5000;
 
-// ✅ Use JWT secret from env
+// ✅ Use JWT secret from en
 const JWT_SECRET = process.env.JWT_SECRET;
 
 //app.use(cors());
