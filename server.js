@@ -96,7 +96,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
-/*const db = mysql.createPool({
+const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
@@ -118,7 +118,7 @@ db.getConnection((err, connection) => {
     console.log("✅ Connected to MySQL database");
     connection.release();
   }
-});*/
+});
 
 
 
@@ -128,7 +128,7 @@ db.getConnection((err, connection) => {
 //import mysql from "mysql2";
 
 // Choose config based on NODE_ENV
-const dbConfig = process.env.NODE_ENV === "development" 
+/*const dbConfig = process.env.NODE_ENV === "development" 
   ? {
       host: process.env.DB_HOST_DEV,
       user: process.env.DB_USER_DEV,
@@ -163,7 +163,7 @@ db.getConnection((err, connection) => {
 });
 
 // ES Module export
-export default db;
+export default db;*/
 
 
 
