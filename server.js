@@ -49,24 +49,24 @@ app.use(express.json());
   credentials: true
 }));*/
 
-/*app.use(cors({
+app.use(cors({
   origin: "https://yonkopa-frontend-app.vercel.app",
   credentials: true
-}));*/
+}));
 
 
 
 
 //const cors = require("cors");
 
-const allowedOrigin = process.env.NODE_ENV === "development"
+/*const allowedOrigin = process.env.NODE_ENV === "development"
   ? process.env.FRONTEND_URL_DEV
   : process.env.FRONTEND_URL_PROD;
 
 app.use(cors({
   origin: allowedOrigin,
   credentials: true
-}));
+}));*/
 
 
 
