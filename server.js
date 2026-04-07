@@ -49,10 +49,10 @@ app.use(express.json());
   credentials: true
 }));*/
 
-app.use(cors({
+/*app.use(cors({
   origin: "https://yonkopa-frontend-app.vercel.app",
   credentials: true
-}));
+}));8/
 
 
 
@@ -68,7 +68,22 @@ app.use(cors({
   credentials: true
 }));*/
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL_DEV,
+  process.env.FRONTEND_URL_PROD,
+  "https://yonkopa-frontend.vercel.app" // current Vercel frontend
+];
 
+app.use(cors({
+  origin: function(origin, callback){
+    if(!origin) return callback(null, true); // allow server-to-server requests
+    if(allowedOrigins.indexOf(origin) === -1){
+      return callback(new Error("CORS not allowed"), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true
+}));
 
 
 
