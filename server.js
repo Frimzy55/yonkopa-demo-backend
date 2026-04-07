@@ -1,3 +1,4 @@
+
 import express from 'express';
 import mysql from 'mysql2';
 import bcrypt from 'bcryptjs';
@@ -12,7 +13,7 @@ import { fileURLToPath } from "url";
 import multer from "multer";
 //import { connect } from 'http2';
 //import { useId } from 'react';
-//import fs from "fs";
+import fs from "fs";
 //import http from "http";
 //import { Server } from "socket.io";
 
@@ -36,17 +37,17 @@ const PORT = process.env.PORT || 5000;
 // ✅ Use JWT secret from env
 const JWT_SECRET = process.env.JWT_SECRET;
 
-app.use(cors());
+//app.use(cors());
 app.use(bodyParser.json());
 app.use(express.json());
 
 
 //import cors from "cors";
 
-/*app.use(cors({
+app.use(cors({
   origin: "http://localhost:3000", // during development
   credentials: true
-}));*/
+}));
 
 /*app.use(cors({
   origin: "https://yonkopa-frontend.vercel.app/",
@@ -93,12 +94,7 @@ const db = mysql.createPool({
   queueLimit: 0
 });
 
-//const db = mysql.createConnection(process.env.MYSQL_URL)
 
-/*db.connect(err => {
-  if (err) console.error('❌ Database connection failed :', err);
-  else console.log('✅ Connected to MySQL database');
-});*/
 
 
 db.getConnection((err, connection) => {
@@ -114,50 +110,6 @@ db.getConnection((err, connection) => {
 
 
 
-
-/*const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: "http://localhost:3000", // or your frontend URL
-  },
-});
-
-app.set("io", io);*/
-
-
-
-
-
-
-/*const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: "http://localhost:3000", // change to your frontend URL in production
-  },
-});
-
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
-
-  // User joins their own room using userId
-  socket.on("joinRoom", (userId) => {
-    socket.join(userId);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected");
-  });
-});
-
-// Make io accessible in routes
-app.set("io", io);
-//app.use("/api/loan", loanRoutes);
-
-
-
-*/
 
 
 
@@ -311,9 +263,9 @@ app.post('/login', (req, res) => {
 
 
     // Update status to 'online'
-    db.query("UPDATE users SET status='online', last_login=NOW() WHERE userId=?", [user.userId], (err2) => {
-      if (err2) console.error("Error updating status:", err2);
-    });
+   // db.query("UPDATE users SET status='online', last_login=NOW() WHERE userId=?", [user.userId], (err2) => {
+      //if (err2) console.error("Error updating status:", err2);
+    //});
 
     // Create JWT token with role info
     const token = jwt.sign(
@@ -412,18 +364,7 @@ app.post("/api/change-password", (req, res) => {
 
 
 
-// LOGOUT ROUTE
-app.post("/logout", (req, res) => {
-  const { userId } = req.body;
 
-  db.query("UPDATE users SET status='offline' WHERE id=?", [userId], (err) => {
-    if (err) {
-      console.error("Error updating logout status:", err);
-      return res.status(500).json({ message: "Server error" });
-    }
-    res.json({ message: "Logged out successfully" });
-  });
-});
 
 // --- AUTH MIDDLEWARE ---
 const authenticateToken = (req, res, next) => {
@@ -527,14 +468,15 @@ app.get("/api/admin/loan-progress", (req, res) => {
 
 
 
-app.post("/api/verify-customer", (req, res) => {
+
+
+app.post("/api/verify-customer",(req, res) => {
   const { userId, kycCode } = req.body;
 
   const query = `
-    SELECT 
-      *
-    FROM customer_kyc
-    WHERE userId = ? AND kycCode = ?
+  SELECT * 
+   FROM personal_kyc
+    WHERE userId = ? AND kycCode = ?;
   `;
 
   db.query(query, [userId, kycCode], (err, results) => {
@@ -549,11 +491,10 @@ app.post("/api/verify-customer", (req, res) => {
 
     res.json({
       verified: true,
-      customer: results[0]
+      customer: results[0], // full joined data
     });
   });
 });
-
 
 
 
@@ -643,310 +584,232 @@ app.delete("/users/:id", (req, res) => {
 
 
 
+// ✅ CREATE UPLOADS FOLDER IF NOT EXISTS
+// ==============================
+const uploadDir = path.join(__dirname, "uploads");
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+// ==============================
+// ✅ MULTER CONFIG
+// ==============================
+
+app.post("/api/kyc/save-all", authenticateToken, upload.fields([
+  { name: "avatar", maxCount: 1 },
+  { name: "payslip", maxCount: 1 },
+  { name: "ghanaCardFront", maxCount: 1 },
+  { name: "ghanaCardBack", maxCount: 1 },
+  { name: "employmentId", maxCount: 1 },
+  { name: "businessPicture", maxCount: 1 },
+]), async (req, res) => {
+  const connection = await db.promise().getConnection();
+  try {
+    await connection.beginTransaction();
+
+   // const { userId } = req.body;
+   const userId = req.user.userId; // ✅ SECURE
+    const toNull = (v) => (v === "" ? null : v);
+
+    // ==================
+    // 1. Personal Info
+    // ==================
+    const avatarPath = req.files.avatar?.[0]?.filename || null;
+
+    await connection.query(`
+      INSERT INTO personal_kyc (
+        userId, title, firstname, middlename, lastname, dateofbirth, gender, maritalstatus, nationalid, residentiallocation, spousename, spousecontact, avatar
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        title=VALUES(title),
+        firstname=VALUES(firstname),
+        middlename=VALUES(middlename),
+        lastname=VALUES(lastname),
+        dateofbirth=VALUES(dateofbirth),
+        gender=VALUES(gender),
+        maritalstatus=VALUES(maritalstatus),
+        nationalid=VALUES(nationalid),
+        residentiallocation=VALUES(residentiallocation),
+        spousename=VALUES(spousename),
+        spousecontact=VALUES(spousecontact),
+        avatar=VALUES(avatar)
+    `, [
+      userId,
+      req.body.title,
+      req.body.firstName,
+      req.body.middleName,
+      req.body.lastName,
+      req.body.dateOfBirth,
+      req.body.gender,
+      req.body.maritalStatus,
+      req.body.nationalId,
+      req.body.residentialLocation,
+      req.body.spouseName,
+      req.body.spouseContact,
+      avatarPath
+    ]);
+
+    // ==================
+    // Generate KYC Code
+    // ==================
+    // Fetch the personal_kyc ID (auto-increment)
+    const [kycResult] = await connection.query(`
+      SELECT pid FROM personal_kyc WHERE userId = ? LIMIT 1
+    `, [userId]);
+
+   // const kycId = kycResult[0]?.id || 1;
+   const kycId = kycResult[0]?.pid || 1;
+    const kycCode = String(kycId).padStart(5, '0'); // "00001"
+
+    // Update personal_kyc with generated code
+    await connection.query(`
+      UPDATE personal_kyc SET kycCode = ? WHERE userId = ?
+    `, [kycCode, userId]);
 
 
 
+    const message = `Your KYC has been submitted successfully. KYC Code: ${kycCode}`;
+    const notificationSql = `
+      INSERT INTO notification (userId, message, type, isRead)
+      VALUES (?, ?, ?, ?)
+`;
+    await connection.query(notificationSql, [userId, message, 'kyc', 0]);
 
+    // ==================
+    // 2. Contact Info
+    // ==================
+    await connection.query(`
+      INSERT INTO contact_kyc (userId, mobileNumber, email, residentialAddress, residentialLandmark, city, state, alternatePhone)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        residentialAddress=VALUES(residentialAddress),
+        residentialLandmark=VALUES(residentialLandmark),
+        city=VALUES(city),
+        state=VALUES(state),
+        alternatePhone=VALUES(alternatePhone)
+    `, [
+      userId,
+      req.body.mobileNumber,
+      req.body.email,
+      req.body.residentialAddress,
+      req.body.residentialLandmark,
+      req.body.city,
+      req.body.state,
+      req.body.alternatePhone
+    ]);
 
+    // ==================
+    // 3. Employment Info
+    // ==================
+    await connection.query(`
+      INSERT INTO employment_kyc (
+        userId, employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment, workPlaceLocation, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessName, businessType, monthlyBusinessIncome, businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness, workingCapital, businessPicture
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        employmentStatus=VALUES(employmentStatus),
+        employerName=VALUES(employerName),
+        jobTitle=VALUES(jobTitle),
+        monthlyIncome=VALUES(monthlyIncome),
+        yearsInCurrentEmployment=VALUES(yearsInCurrentEmployment),
+        workPlaceLocation=VALUES(workPlaceLocation),
+        payslip=VALUES(payslip),
+        ghanaCardFront=VALUES(ghanaCardFront),
+        ghanaCardBack=VALUES(ghanaCardBack),
+        employmentId=VALUES(employmentId),
+        businessName=VALUES(businessName),
+        businessType=VALUES(businessType),
+        monthlyBusinessIncome=VALUES(monthlyBusinessIncome),
+        businessLocation=VALUES(businessLocation),
+        businessGpsAddress=VALUES(businessGpsAddress),
+        numberOfWorkers=VALUES(numberOfWorkers),
+        yearsInBusiness=VALUES(yearsInBusiness),
+        workingCapital=VALUES(workingCapital),
+        businessPicture=VALUES(businessPicture)
+    `, [
+      userId,
+      req.body.employmentStatus,
+      toNull(req.body.employerName),
+      toNull(req.body.jobTitle),
+      toNull(req.body.monthlyIncome),
+      toNull(req.body.yearsInCurrentEmployment),
+      toNull(req.body.workPlaceLocation),
+      req.files.payslip?.[0]?.filename || null,
+      req.files.ghanaCardFront?.[0]?.filename || null,
+      req.files.ghanaCardBack?.[0]?.filename || null,
+      req.files.employmentId?.[0]?.filename || null,
+      toNull(req.body.businessName),
+      toNull(req.body.businessType),
+      toNull(req.body.monthlyBusinessIncome),
+      toNull(req.body.businessLocation),
+      toNull(req.body.businessGpsAddress),
+      toNull(req.body.numberOfWorkers),
+      toNull(req.body.yearsInBusiness),
+      toNull(req.body.workingCapital),
+      req.files.businessPicture?.[0]?.filename || null
+    ]);
 
+    // ==================
+    // 4. Reference Info
+    // ==================
+    await connection.query(`
+      INSERT INTO reference_kyc (userId, referenceName1, referencePhone1, referenceRelationship1, referenceName2, referencePhone2, referenceRelationship2)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        referenceName1=VALUES(referenceName1),
+        referencePhone1=VALUES(referencePhone1),
+        referenceRelationship1=VALUES(referenceRelationship1),
+        referenceName2=VALUES(referenceName2),
+        referencePhone2=VALUES(referencePhone2),
+        referenceRelationship2=VALUES(referenceRelationship2)
+    `, [
+      userId,
+      req.body.referenceName1,
+      req.body.referencePhone1,
+      req.body.referenceRelationship1,
+      req.body.referenceName2,
+      req.body.referencePhone2,
+      req.body.referenceRelationship2
+    ]);
 
+    await connection.commit();
 
-
-
-
-// Search endpoint
-app.get("/api/customers/search", (req, res) => {
-  const { q } = req.query;
-
-  if (!q || q.trim() === "") {
-    return res.status(400).json({ message: "Query is required" });
+    res.json({ success: true, kycCode });
+  } catch (err) {
+    console.error("Transaction error:", err);
+    await connection.rollback();
+    res.status(500).json({ success: false, message: "Failed to save KYC" });
+  } finally {
+    connection.release();
   }
-
-  const sql = `
-    SELECT id, kyc_code, firstName, middleName, lastName, mobileNumber, email
-    FROM customers_kyc
-    WHERE kyc_code LIKE ? 
-      OR CONCAT(firstName, ' ', middleName, ' ', lastName) LIKE ?
-    LIMIT 50
-  `;
-
-  const values = [`%${q}%`, `%${q}%`];
-
-  db.query(sql, values, (err, rows) => {
-    if (err) {
-      console.error("Search error:", err);
-      return res.status(500).json({ message: "Server error" });
-    }
-
-    res.json(rows);
-  });
 });
 
 
 
 
 
-// GET pending loan applications (async/await)
-// GET pending loan applications (CALLBACK STYLE – CORRECT)
-app.get('/api/loan-applications/pending', (req, res) => {
-  const sql = `
-    SELECT 
-     *
-    FROM loans
-    ORDER BY createdAt DESC
-  `;
-
-  db.query(sql, (err, rows) => {
-    if (err) {
-      console.error('Error fetching applications:', err);
-      return res.status(500).json({ message: 'Error fetching applications' });
-    }
-
-    res.json(rows);
-  });
-});
-
-
-//app.use("/uploads", express.static("uploads"));
-
-
-
-//app.use("/api/loan", loanRoutes);
-
-
-
-
-// DELETE /api/loans/delete/:id
-app.delete("/api/loans/delete/:id", (req, res) => {
-  const { id } = req.params;
-
-  const sql = "DELETE FROM loans WHERE id = ?";
-  db.query(sql, [id], (err, result) => {
-    if (err) return res.status(500).json({ message: err.message });
-    if (result.affectedRows === 0)
-      return res.status(404).json({ message: "Loan not found" });
-    res.json({ message: "Loan deleted successfully" });
-  });
-});
-
-
-
-
-
-
-app.post("/api/loan/apply-loan1", (req, res) => {
-  const formData = { ...req.body };
-
-  // List of allowed columns in loans table
-  const allowedFields = [
-    "kycCode","fullName","phone","email","dob","gender","nationalId","maritalStatus","dependents",
-    "residentialAddress","residentialGPS","loanType","employerName","jobTitle",
-    "monthlySalary","businessName","businessType","businessRegNo","businessAddress",
-    "businessRevenue","yearsInBusiness","loanAmount","loanPurpose","loanTerm",
-    "repaymentFrequency","guarantorName","guarantorPhone","guarantorAddress",
-    "guarantorRelationship","guarantorNationality","guarantorGender","guarantorDOB"
-  ];
-
-  // Remove unknown fields
-  for (const key in formData) {
-    if (!allowedFields.includes(key)) delete formData[key];
-  }
-
-  // Convert empty strings to null
-  for (const key in formData) {
-    if (formData[key] === "") formData[key] = null;
-  }
-
-  // Insert into MySQL
-  const query = "INSERT INTO loans SET ?";
-  db.query(query, formData, (err, result) => {
-    if (err) {
-      console.error("MySQL Insert Error:", err);
-      return res.status(500).json({ success: false, message: "DB error" });
-    }
-    res.json({ success: true, id: result.insertId });
-  });
-});
-
-
-
-
-
-
-
-
-
-// ================================
-// KYC SUBMISSION + NOTIFICATION
-// ================================
-app.post(
-  "/api/kyc/submit",
-  upload.fields([
-    { name: "avatar", maxCount: 1 },
-    { name: "payslip", maxCount: 1 },
-    { name: "ghanaCardFront", maxCount: 1 },
-    { name: "ghanaCardBack", maxCount: 1 },
-    { name: "employmentId", maxCount: 1 },
-    { name: "businessPicture", maxCount: 1 },
-  ]),
-  (req, res) => {
-    try {
-
-      const data = req.body;
-      const files = req.files || {};
-
-      const query = `
-        INSERT INTO customer_kyc (
-          userId,kycCode, avatar, title, firstName, middleName, lastName, dateOfBirth, gender, maritalStatus,
-          nationalId, taxId, residentialLocation, residentialLandmark, spouseName, spouseContact,
-          mobileNumber, email, residentialAddress, city, state, zipCode,
-          employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment,
-          workPlaceLocation, businessName, businessType, monthlyBusinessIncome,
-          businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness,
-          workingCapital, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessPicture,
-          referenceName1, referencePhone1, referenceRelationship1,
-          referenceName2, referencePhone2, referenceRelationship2, createdAt
-
-          
-        ) VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?)
-      `;
-
-      const values = [
-         data.userId || null,
-        data.kycCode || null,
-        files.avatar?.[0]?.filename || null,
-        data.title || null,
-        data.firstName || null,
-        data.middleName || null,
-        data.lastName || null,
-        data.dateOfBirth || null,
-        data.gender || null,
-        data.maritalStatus || null,
-        data.nationalId || null,
-        data.taxId || null,
-        data.residentialLocation || null,
-        data.residentialLandmark || null,
-        data.spouseName || null,
-        data.spouseContact || null,
-        data.mobileNumber || null,
-        data.email || null,
-        data.residentialAddress || null,
-        data.city || null,
-        data.state || null,
-        data.zipCode || null,
-        data.employmentStatus || null,
-        data.employerName || null,
-        data.jobTitle || null,
-        data.monthlyIncome || null,
-        data.yearsInCurrentEmployment || null,
-        data.workPlaceLocation || null,
-        data.businessName || null,
-        data.businessType || null,
-        data.monthlyBusinessIncome || null,
-        data.businessLocation || null,
-        data.businessGpsAddress || null,
-        data.numberOfWorkers || null,
-        data.yearsInBusiness || null,
-        data.workingCapital || null,
-        files.payslip?.[0]?.filename || null,
-        files.ghanaCardFront?.[0]?.filename || null,
-        files.ghanaCardBack?.[0]?.filename || null,
-        files.employmentId?.[0]?.filename || null,
-        files.businessPicture?.[0]?.filename || null,
-
-
-        // ✅ NEW REFERENCES
-       data.referenceName1 || null,
-       data.referencePhone1 || null,
-       data.referenceRelationship1 || null,
-       data.referenceName2 || null,
-       data.referencePhone2 || null,
-       data.referenceRelationship2 || null,
-        new Date()
-      ];
-
-      db.query(query, values, (err, result) => {
-
-        if (err) {
-          console.error("Insert error:", err);
-          return res.status(500).json({
-            message: "Failed to submit KYC",
-            error: err.message
-          });
-        }
-
-       // const kycId = result.insertId;
-
-          // 🔥 Generate KYC CODE PROPERLY
-        const kycId = result.insertId;
-       // const kycCode = `KYC-${kycId}`;
-        const kycCode = `${String(kycId).padStart(5, "0")}`;
-
-        // 🔔 CREATE NOTIFICATION
-        const notificationQuery = `
-        INSERT INTO notification (userId, message, type, createdAt)
-           VALUES (?, ?, ?, NOW())
-         `;
-
-        const notificationValues = [
-         // kycId,
-         data.userId, // ✅ correct
-
-         //data.kycCode || null, // ✅ NEW: include KYC code
-          //`KYC submitted successfully for ${data.firstName} ${data.lastName} ${data.kycCode}`,
-          `Hello  ${data.firstName} ${data.lastName} Your KYC code is ${kycCode}`,
-          "KYC_SUBMITTED"
-        ];
-
-        db.query(notificationQuery, notificationValues, (notifyErr) => {
-
-          if (notifyErr) {
-            console.error("Notification error:", notifyErr);
-          }
-
-          res.status(200).json({
-            message: "KYC submitted successfully",
-            id: kycId
-          });
-
-        });
-
-      });
-
-    } catch (error) {
-
-      console.error("Server error:", error);
-
-      res.status(500).json({
-        message: "Server error",
-        error: error.message
-      });
-
-    }
-  }
-);
-
-
-
-app.get("/api/customer-kyc/:userId", (req, res) => {
+app.get("/api/kyc/avatar/:userId", (req, res) => {
   const { userId } = req.params;
 
-  const query = "SELECT avatar FROM customer_kyc WHERE userId = ?";
+  const sql = `SELECT avatar FROM personal_kyc WHERE userId = ? LIMIT 1`;
 
-  db.query(query, [userId], (err, results) => {
+  db.query(sql, [userId], (err, result) => {
     if (err) {
-      console.error("DB Error:", err);
-      return res.status(500).json({ error: "Server error" });
+      console.error(err);
+      return res.status(500).json({ success: false });
     }
 
-    if (results.length === 0) {
-      return res.json({});
+    if (!result[0] || !result[0].avatar) {
+      return res.json({ success: true, avatar: null });
     }
 
-    res.json(results[0]); // { avatar: "image.jpg" }
+    // Fix backslashes for URLs
+    const avatarPath = result[0].avatar.replace(/\\/g, "/");
+
+    res.json({ success: true, avatar: avatarPath });
   });
 });
+
 
 
 
@@ -974,6 +837,76 @@ app.get("/api/notifications/:userId", (req, res) => {
 
 });
 
+
+
+
+
+
+app.get("/api/kyc/check/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  const sql = `
+    SELECT kycCode 
+    FROM personal_kyc 
+    WHERE userId = ?
+    LIMIT 1
+  `;
+
+  db.query(sql, [userId], (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ success: false });
+    }
+
+    if (results.length > 0 && results[0].kycCode) {
+      return res.json({
+        success: true,
+        hasKyc: true,
+        kycCode: results[0].kycCode,
+      });
+    }
+
+    res.json({
+      success: true,
+      hasKyc: false,
+    });
+  });
+});
+
+
+
+
+
+//app.use("/api/loan", loanRoutes);
+
+
+
+
+
+
+
+
+
+app.put("/api/notifications/mark-read/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  const query = `
+    UPDATE notification
+    SET isRead = 1
+    WHERE userId = ? AND isRead = 0
+  `;
+
+  db.query(query, [userId], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({
+        message: "Failed to mark notifications as read"
+      });
+    }
+
+    res.json({ message: "Notifications marked as read" });
+  });
+});
 
 
 
@@ -1022,110 +955,6 @@ app.get("/api/kyc/checks-national-id", (req, res) => {
 
 
 
-
-app.post(
-  "/apply-loan",
-  upload.fields([
-    { name: "guarantorProfilePicture" },
-    { name: "guarantorPayslip" },
-    { name: "guarantorGhanaCardFront" },
-    { name: "guarantorGhanaCardBack" },
-    { name: "guarantorBusinessPicture" },
-  ]),
-  (req, res) => {
-    const body = req.body;
-    const files = req.files || {};
-
-    // ✅ UPDATED COLUMNS (added momo fields at the end)
-    const columns = [
-      "userId","fullName", "phone", "email", "kycCode", "dob", "gender", "nationalId", "maritalStatus", "dependents",
-      "residentialAddress", "residentialGPS", "employmentStatus", "loanAmount", "loanPurpose", "loanTerm",
-      "repaymentFrequency", "ratePerAnnum", "interest", "totalInterest", "numberOfPayments", "monthlyPayment",
-      "loanFees", "guarantorName", "guarantorPhone", "guarantorAddress", "guarantorResidenceLocation",
-      "guarantorIdNumber", "guarantorEmployeeType", "guarantorRank", "guarantorWorkLocation", "guarantorNameOfEmployer",
-      "guarantorYearsInService", "guarantorPayslip", "guarantorGhanaCardFront", "guarantorGhanaCardBack",
-      "guarantorBusinessName", "guarantorBusinessLocation", "guarantorYearsInBusiness",
-      "guarantorBusinessPicture", "guarantorProfilePicture",
-
-      // ✅ NEW MOMO FIELDS
-      "momoProvider",
-      "momoNumber",
-      "momoAccountName"
-    ];
-
-    // ✅ UPDATED VALUES (same order as columns)
-    const values = [
-       body.userId || null,
-      body.fullName || null,
-      body.phone || null,
-      body.email || null,
-      body.kycCode || null,
-      body.dob || null,
-      body.gender || null,
-      body.nationalId || null,
-      body.maritalStatus || null,
-      body.dependents ? parseInt(body.dependents) : 0,
-      body.residentialAddress || null,
-      body.residentialGPS || null,
-      body.employmentStatus || null,
-      body.loanAmount ? parseFloat(body.loanAmount) : 0,
-      body.loanPurpose || null,
-      body.loanTerm ? parseInt(body.loanTerm) : 0,
-      body.repaymentFrequency || null,
-      body.ratePerAnnum ? parseFloat(body.ratePerAnnum) : 0,
-      body.interest ? parseFloat(body.interest) : 0,
-      body.totalInterest ? parseFloat(body.totalInterest) : 0,
-      body.numberOfPayments ? parseInt(body.numberOfPayments) : 0,
-      body.monthlyPayment ? parseFloat(body.monthlyPayment) : 0,
-      body.loanFees ? parseFloat(body.loanFees) : 0,
-      body.guarantorName || null,
-      body.guarantorPhone || null,
-      body.guarantorAddress || null,
-      body.guarantorResidenceLocation || null,
-      body.guarantorIdNumber || null,
-      body.guarantorEmployeeType || null,
-      body.guarantorRank || null,
-      body.guarantorWorkLocation || null,
-      body.guarantorNameOfEmployer || null,
-      body.guarantorYearsInService ? parseInt(body.guarantorYearsInService) : 0,
-      files?.guarantorPayslip?.[0]?.filename || null,
-      files?.guarantorGhanaCardFront?.[0]?.filename || null,
-      files?.guarantorGhanaCardBack?.[0]?.filename || null,
-      body.guarantorBusinessName || null,
-      body.guarantorBusinessLocation || null,
-      body.guarantorYearsInBusiness ? parseInt(body.guarantorYearsInBusiness) : 0,
-      files?.guarantorBusinessPicture?.[0]?.filename || null,
-      files?.guarantorProfilePicture?.[0]?.filename || null,
-
-      // ✅ MOMO VALUES (ORDER MUST MATCH)
-      body.momoProvider || null,
-      body.momoNumber || null,
-      body.momoAccountName || null
-    ];
-
-    const placeholders = columns.map(() => "?").join(", ");
-
-    const query = `
-      INSERT INTO loan_applications (${columns.join(", ")})
-      VALUES (${placeholders})
-    `;
-
-    db.query(query, values, (err, result) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({
-          success: false,
-          message: err.message,
-        });
-      }
-
-      res.json({
-        success: true,
-        message: "Loan submitted successfully!",
-      });
-    });
-  }
-);
 
 
 
@@ -1245,30 +1074,305 @@ app.post("/api/applications/submit-all", (req, res) => {
 
 
 // Change from kycCode to userId
+
+
+
+
+// GET KYC DETAILS BY USER ID
+app.get("/api/kyc-view/:userId", (req, res) => {
+  const userId = req.params.userId;
+
+  const sql = `
+    SELECT 
+        p.*,
+        
+        c.mobileNumber,
+        c.email,
+        c.residentialAddress,
+        c.city,
+        c.state,
+        e.employmentStatus,
+        e.employerName,
+        e.jobTitle,
+        e.monthlyIncome,
+        e.businessName,
+        e.businessType,
+        r.referenceName1,
+        r.referencePhone1,
+        r.referenceRelationship1,
+        r.referenceName2,
+        r.referencePhone2,
+        r.referenceRelationship2,
+        r.kyc_code
+    FROM personal_kyc p
+    LEFT JOIN contact_kyc c ON p.userId = c.userId
+    LEFT JOIN employment_kyc e ON p.userId = e.userId
+    LEFT JOIN reference_kyc r ON p.userId = r.userId
+    WHERE p.userId = ?
+  `;
+
+  db.query(sql, [userId], (err, result) => {
+    if (err) return res.status(500).json({ success: false, error: err });
+
+    if (result.length === 0) {
+      return res.status(404).json({ success: false, message: "No KYC found" });
+    }
+
+    res.json({ success: true, data: result[0] }); // ✅ wrap in success/data
+  });
+});
+
+app.post(
+  "/api/loan/submit-full-application",
+  upload.fields([
+    { name: "guarantorProfilePicture" },
+    { name: "guarantorPayslip" },
+    { name: "guarantorBusinessPicture" },
+    { name: "guarantorGhanaCardFront" },
+    { name: "guarantorGhanaCardBack" },
+  ]),
+  (req, res) => {
+
+    console.log("📦 BODY:", req.body);
+    console.log("📁 FILES:", req.files);
+
+    db.getConnection((err, connection) => {
+      if (err) {
+        console.error("❌ Connection Error:", err);
+        return res.status(500).json({ success: false, error: err.message });
+      }
+
+      connection.beginTransaction((err) => {
+        if (err) {
+          connection.release();
+          console.error("❌ Transaction Error:", err);
+          return res.status(500).json({ success: false, error: err.message });
+        }
+
+        const {
+          userId, fullName, phone, email, kycCode, dob, gender, nationalid,
+          maritalStatus, dependents, residentialAddress, residentialGPS,
+          employmentStatus, loanAmount, loanPurpose, loanTerm,
+          repaymentFrequency, ratePerAnnum, interest, totalInterest,
+          numberOfPayments, monthlyPayment, loanFees, guarantorName,
+          guarantorPhone, guarantorAddress, guarantorResidenceLocation,
+          guarantorIdNumber, guarantorEmployeeType, guarantorRank,
+          guarantorWorkLocation, guarantorNameOfEmployer, guarantorYearsInService,
+          guarantorBusinessName, guarantorBusinessLocation, guarantorYearsInBusiness,
+          momoProvider, momoNumber, momoAccountName
+        } = req.body;
+
+        // ================= APPLICANT =================
+        const applicantData = {
+          userId, fullName, phone, email, kyc_code: kycCode, dob,
+          gender, nationalid, maritalStatus,
+          dependents: dependents ? parseInt(dependents) : null,
+          residentialAddress, residentialGPS, employmentStatus
+        };
+
+        connection.query(
+          "INSERT INTO applicant_details SET ?",
+          applicantData,
+          (err) => {
+            if (err) {
+              console.error("❌ Applicant Error:", err);
+              return connection.rollback(() => {
+                connection.release();
+                res.status(500).json({ success: false, error: err.message });
+              });
+            }
+
+            // ================= LOAN =================
+            const loanData = {
+              userId, kyc_code: kycCode,
+              loanAmount: loanAmount ? parseFloat(loanAmount) : null,
+              loanPurpose,
+              loanTerm: loanTerm ? parseInt(loanTerm) : null,
+              repaymentFrequency,
+              ratePerAnnum: ratePerAnnum ? parseFloat(ratePerAnnum) : null,
+              interest: interest ? parseFloat(interest) : null,
+              totalInterest: totalInterest ? parseFloat(totalInterest) : null,
+              numberOfPayments: numberOfPayments ? parseInt(numberOfPayments) : null,
+              monthlyPayment: monthlyPayment ? parseFloat(monthlyPayment) : null,
+              loanFees: loanFees ? parseFloat(loanFees) : null,
+            };
+
+            connection.query("INSERT INTO loan_details SET ?", loanData, (err) => {
+              if (err) {
+                console.error("❌ Loan Error:", err);
+                return connection.rollback(() => {
+                  connection.release();
+                  res.status(500).json({ success: false, error: err.message });
+                });
+              }
+
+              // ================= GUARANTOR =================
+              const guarantorData = {
+                userId,
+                kyc_code: kycCode,
+                guarantorName,
+                guarantorPhone,
+                guarantorAddress,
+                guarantorResidenceLocation,
+                guarantorIdNumber,
+                guarantorEmployeeType,
+                guarantorRank,
+                guarantorWorkLocation,
+                guarantorNameOfEmployer,
+                guarantorYearsInService: guarantorYearsInService ? parseInt(guarantorYearsInService) : null,
+                guarantorBusinessName,
+                guarantorBusinessLocation,
+                guarantorYearsInBusiness: guarantorYearsInBusiness ? parseInt(guarantorYearsInBusiness) : null,
+                guarantorProfilePicture: req.files?.guarantorProfilePicture?.[0]?.path || null,
+                guarantorPayslip: req.files?.guarantorPayslip?.[0]?.path || null,
+                guarantorBusinessPicture: req.files?.guarantorBusinessPicture?.[0]?.path || null,
+                guarantorGhanaCardFront: req.files?.guarantorGhanaCardFront?.[0]?.path || null,
+                guarantorGhanaCardBack: req.files?.guarantorGhanaCardBack?.[0]?.path || null,
+              };
+
+              connection.query("INSERT INTO guarantor_info SET ?", guarantorData, (err) => {
+                if (err) {
+                  console.error("❌ Guarantor Error:", err);
+                  return connection.rollback(() => {
+                    connection.release();
+                    res.status(500).json({ success: false, error: err.message });
+                  });
+                }
+
+                // ================= MOMO =================
+                const momoData = {
+                  userId,
+                  kyc_code: kycCode,
+                  momoProvider,
+                  momoNumber,
+                  momoAccountName
+                };
+
+                connection.query("INSERT INTO momo_details SET ?", momoData, (err) => {
+                  if (err) {
+                    console.error("❌ Momo Error:", err);
+                    return connection.rollback(() => {
+                      connection.release();
+                      res.status(500).json({ success: false, error: err.message });
+                    });
+                  }
+
+                  connection.commit((err) => {
+                    connection.release();
+
+                    if (err) {
+                      console.error("❌ Commit Error:", err);
+                      return res.status(500).json({ success: false, error: err.message });
+                    }
+
+                    res.json({ success: true });
+                  });
+                });
+              });
+            });
+          }
+        );
+      });
+    });
+  }
+);
+
 app.get("/api/loan-status/:userId", (req, res) => {
   const { userId } = req.params;
 
-  const query = `
-    SELECT status 
-    FROM loan_applications
+  const sql = `
+    SELECT loan_status 
+    FROM momo_details
     WHERE userId = ?
-    ORDER BY createdAt DESC
+    ORDER BY created_at DESC
     LIMIT 1
   `;
 
-  db.query(query, [userId], (err, result) => {
+  db.query(sql, [userId], (err, results) => {
     if (err) {
-      console.error(err);
-      return res.status(500).json({ message: "Error fetching loan status" });
+      console.error("SQL ERROR:", err);
+      return res.status(500).json({ status: "No Loan" });
     }
 
-    if (result.length === 0) {
+    // ✅ If no record found
+    if (results.length === 0) {
       return res.json({ status: "No Loan" });
     }
 
-    res.json({ status: result[0].status });
+    // ✅ Return actual status
+    const status = results[0].loan_status;
+
+    res.json({ status });
   });
 });
+
+
+
+
+// backend/routes/admin.js
+app.get("/api/admin/full-loan-kyc", (req, res) => {
+  const sql = "SELECT * FROM full_loan_kyc_view ORDER BY applicant_created_at DESC";
+  db.query(sql, (err, results) => {
+    if (err) return res.status(500).json({ success: false, error: err });
+    res.json(results);
+  });
+});
+
+
+
+
+
+app.get("/api/users", (req, res) => {
+  const sql = "SELECT * FROM users";
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Failed to fetch users" });
+    }
+
+    const users = results.map(user => {
+      const names = user.full_name ? user.full_name.split(" ") : [];
+
+      return {
+        id: user.userId,
+        username: user.email, // using email as username
+        firstName: names[0] || "",
+        lastName: names.slice(1).join(" ") || "",
+        email: user.email,
+        phoneNumber: user.phone,
+        roleId: user.role, // enum value
+        status: "Active", // default (since not in DB)
+        branch: "",
+        createdAt: user.created_at
+      };
+    });
+
+    res.json(users);
+  });
+});
+
+
+
+
+
+app.get("/api/users/stats", (req, res) => {
+  const sql = "SELECT COUNT(*) AS totalUsers FROM users";
+
+  db.query(sql, (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Error fetching stats" });
+    }
+
+    res.json({
+      totalUsers: result[0].totalUsers
+    });
+  });
+});
+
+
+
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
