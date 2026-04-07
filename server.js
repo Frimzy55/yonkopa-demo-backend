@@ -95,7 +95,10 @@ app.use(cors({
   credentials: true
 }));
 
-app.options("*", cors()); // ✅ handle preflight
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 
 
 
