@@ -44,7 +44,7 @@ const PAYSTACK_SECRET_KEY = process.env.NODE_ENV === "development"
   ? process.env.PAYSTACK_SECRET_KEY_DEV
   : process.env.PAYSTACK_SECRET_KEY_PROD;
 
-//app.use(cors());
+app.use(cors());
 app.use(bodyParser.json());
 app.use(express.json());
 
