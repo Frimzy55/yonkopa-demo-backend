@@ -37,7 +37,7 @@ const PORT = process.env.PORT || 5000;
 // ✅ Use JWT secret from en
 const JWT_SECRET = process.env.JWT_SECRET;
 
-app.use(cors());
+//app.use(cors());
 app.use(bodyParser.json());
 app.use(express.json());
 
@@ -49,11 +49,11 @@ app.use(express.json());
   credentials: true
 }));*/
 
-/*app.use(cors({
+app.use(cors({
   origin: "https://yonkopa-frontend-app.vercel.app",
   credentials: true
 }));
-*/
+
 
 
 
