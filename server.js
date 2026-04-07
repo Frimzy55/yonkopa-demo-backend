@@ -49,8 +49,22 @@ app.use(express.json());
   credentials: true
 }));*/
 
-app.use(cors({
+/*app.use(cors({
   origin: "https://yonkopa-frontend-app.vercel.app",
+  credentials: true
+}));*/
+
+
+
+
+//const cors = require("cors");
+
+const allowedOrigin = process.env.NODE_ENV === "development"
+  ? process.env.FRONTEND_URL_DEV
+  : process.env.FRONTEND_URL_PROD;
+
+app.use(cors({
+  origin: allowedOrigin,
   credentials: true
 }));
 
@@ -82,7 +96,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
-const db = mysql.createPool({
+/*const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
@@ -104,8 +118,52 @@ db.getConnection((err, connection) => {
     console.log("✅ Connected to MySQL database");
     connection.release();
   }
+});*/
+
+
+
+//const mysql = require("mysql2");
+
+
+//import mysql from "mysql2";
+
+// Choose config based on NODE_ENV
+const dbConfig = process.env.NODE_ENV === "development" 
+  ? {
+      host: process.env.DB_HOST_DEV,
+      user: process.env.DB_USER_DEV,
+      password: process.env.DB_PASSWORD_DEV,
+      database: process.env.DB_NAME_DEV,
+      port: process.env.DB_PORT_DEV,
+    }
+  : {
+      host: process.env.DB_HOST_PROD,
+      user: process.env.DB_USER_PROD,
+      password: process.env.DB_PASSWORD_PROD,
+      database: process.env.DB_NAME_PROD,
+      port: process.env.DB_PORT_PROD,
+    };
+
+// Create pool
+const db = mysql.createPool({
+  ...dbConfig,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 });
 
+// Test connection
+db.getConnection((err, connection) => {
+  if (err) {
+    console.error("❌ Database connection failed:", err);
+  } else {
+    console.log("✅ Connected to MySQL database");
+    connection.release();
+  }
+});
+
+// ES Module export
+export default db;
 
 
 
