@@ -35,7 +35,14 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ✅ Use JWT secret from en
-const JWT_SECRET = process.env.JWT_SECRET;
+//const JWT_SECRET = process.env.JWT_SECRET
+const JWT_SECRET = process.env.NODE_ENV === "development" 
+  ? process.env.JWT_SECRET_DEV
+  : process.env.JWT_SECRET_PROD;
+
+const PAYSTACK_SECRET_KEY = process.env.NODE_ENV === "development" 
+  ? process.env.PAYSTACK_SECRET_KEY_DEV
+  : process.env.PAYSTACK_SECRET_KEY_PROD;
 
 //app.use(cors());
 app.use(bodyParser.json());
@@ -68,17 +75,18 @@ app.use(cors({
   credentials: true
 }));*/
 
+
 const allowedOrigins = [
   process.env.FRONTEND_URL_DEV,
   process.env.FRONTEND_URL_PROD,
-  "https://yonkopa-frontend.vercel.app" // current Vercel frontend
+  process.env.FRONTEND_URL_VERCEL
 ];
 
 app.use(cors({
-  origin: function(origin, callback){
-    if(!origin) return callback(null, true); // allow server-to-server requests
-    if(allowedOrigins.indexOf(origin) === -1){
-      return callback(new Error("CORS not allowed"), false);
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true); // allow server-to-server requests
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error("Not allowed by CORS"), false);
     }
     return callback(null, true);
   },
@@ -111,7 +119,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
-const db = mysql.createPool({
+/*const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
@@ -134,16 +142,12 @@ db.getConnection((err, connection) => {
     connection.release();
   }
 });
-
-
-
-//const mysql = require("mysql2");
+*/
 
 
 //import mysql from "mysql2";
 
-// Choose config based on NODE_ENV
-/*const dbConfig = process.env.NODE_ENV === "development" 
+const dbConfig = process.env.NODE_ENV === "development" 
   ? {
       host: process.env.DB_HOST_DEV,
       user: process.env.DB_USER_DEV,
@@ -159,7 +163,6 @@ db.getConnection((err, connection) => {
       port: process.env.DB_PORT_PROD,
     };
 
-// Create pool
 const db = mysql.createPool({
   ...dbConfig,
   waitForConnections: true,
@@ -167,7 +170,6 @@ const db = mysql.createPool({
   queueLimit: 0
 });
 
-// Test connection
 db.getConnection((err, connection) => {
   if (err) {
     console.error("❌ Database connection failed:", err);
@@ -177,11 +179,7 @@ db.getConnection((err, connection) => {
   }
 });
 
-// ES Module export
-export default db;*/
-
-
-
+export default db;
 
 
 
