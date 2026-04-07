@@ -44,15 +44,15 @@ app.use(express.json());
 
 //import cors from "cors";
 
-app.use(cors({
+/*app.use(cors({
   origin: "http://localhost:3000", // during development
   credentials: true
-}));
-
-/*app.use(cors({
-  origin: "https://yonkopa-frontend.vercel.app/",
-  credentials: true
 }));*/
+
+app.use(cors({
+  origin: "https://yonkopa-frontend-app.vercel.app",
+  credentials: true
+}));
 
 
 
