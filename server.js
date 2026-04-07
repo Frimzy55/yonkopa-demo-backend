@@ -173,7 +173,7 @@ export default db;*/
 
 
 
-// --- SIGNUP customer ENDPOINT ---
+// --- SIGNUP customer ENDPOINT --
 app.post('/signup', async (req, res) => {
   const { fullName, identifier, password, confirmPassword, role } = req.body;
 
