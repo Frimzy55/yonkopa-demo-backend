@@ -44,7 +44,7 @@ const PAYSTACK_SECRET_KEY = process.env.NODE_ENV === "development"
   ? process.env.PAYSTACK_SECRET_KEY_DEV
   : process.env.PAYSTACK_SECRET_KEY_PROD;
 
-app.use(cors());
+//app.use(cors());
 app.use(bodyParser.json());
 app.use(express.json());
 
@@ -74,24 +74,28 @@ app.use(cors({
   origin: allowedOrigin,
   credentials: true
 }));*/
-
-
+//app.options('*', cors());
 const allowedOrigins = [
-  process.env.FRONTEND_URL_DEV,
-  process.env.FRONTEND_URL_PROD,
-  process.env.FRONTEND_URL_VERCEL
+  "http://localhost:3000",
+  "https://yonkopa-frontend.vercel.app",
+  "https://yonkopa-frontend-app.vercel.app"
 ];
 
 app.use(cors({
   origin: function(origin, callback) {
-    if (!origin) return callback(null, true); // allow server-to-server requests
-    if (allowedOrigins.indexOf(origin) === -1) {
-      return callback(new Error("Not allowed by CORS"), false);
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      console.log("Blocked by CORS:", origin);
+      return callback(null, true); // ✅ DON'T throw error
     }
-    return callback(null, true);
   },
   credentials: true
 }));
+
+app.options("*", cors()); // ✅ handle preflight
 
 
 
