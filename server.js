@@ -64,7 +64,6 @@ app.use(express.json());
 
 
 
-//const cors = require("cors");
 
 /*const allowedOrigin = process.env.NODE_ENV === "development"
   ? process.env.FRONTEND_URL_DEV
