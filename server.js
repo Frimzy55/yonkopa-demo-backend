@@ -547,14 +547,22 @@ app.get("/api/admin/loan-progress", (req, res) => {
 
 
 
-app.post("/api/verify-customer",(req, res) => {
+/*app.post("/api/verify-customer",(req, res) => {
   const { userId, kycCode } = req.body;
+    console.log("Incoming data:", req.body); // 👈 ADD THIS
 
-  const query = `
+  //const query = `
+  //SELECT * 
+  // FROM personal_kyc
+   // WHERE userId = ? AND kycCode = ?;
+ // `;
+
+ const query = `
   SELECT * 
-   FROM personal_kyc
-    WHERE userId = ? AND kycCode = ?;
-  `;
+  FROM personal_kyc
+  WHERE userId = ? AND kycCode = ?
+`;
+
 
   db.query(query, [userId, kycCode], (err, results) => {
     if (err) {
@@ -569,6 +577,38 @@ app.post("/api/verify-customer",(req, res) => {
     res.json({
       verified: true,
       customer: results[0], // full joined data
+    });
+  });
+});*/
+
+
+app.post("/api/verify-customer", (req, res) => {
+  let { userId, kycCode } = req.body;
+
+  kycCode = kycCode?.trim(); // ✅ Remove spaces
+
+  console.log("Query values:", userId, kycCode);
+
+  const query = `
+    SELECT * 
+    FROM personal_kyc
+    WHERE userId = ? AND kycCode = ?
+  `;
+
+  db.query(query, [userId, kycCode], (err, results) => {
+    if (err) {
+      console.error("Verify customer error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (results.length === 0) {
+      console.log("No matching KYC found");
+      return res.json({ verified: false });
+    }
+
+    res.json({
+      verified: true,
+      customer: results[0],
     });
   });
 });
