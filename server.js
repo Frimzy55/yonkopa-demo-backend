@@ -318,7 +318,7 @@ app.post('/signup1', async (req, res) => {
 
 // --- LOGIN ENDPOINT ---
 // --- LOGIN ENDPOINT ---
-app.post('/login', (req, res) => {
+/*app.post('/login', (req, res) => {
   const { identifier, password } = req.body; // identifier can be email or phone
 
   // SQL: check if either email or phone matches
@@ -363,9 +363,82 @@ app.post('/login', (req, res) => {
       }
     });
   });
+}); */
+
+// --- LOGIN ENDPOINT ---
+app.post('/login', async (req, res) => {
+  try {
+    let { identifier, password } = req.body;
+
+    if (!identifier || !password) {
+      return res.status(400).json({ message: 'Email/Phone and password are required' });
+    }
+
+    // Normalize input
+    identifier = identifier.trim();
+    const normalizedEmail = identifier.toLowerCase();
+    const phoneDigits = identifier.replace(/\D/g, ''); // remove non-digit chars
+
+    // SQL: check email (case-insensitive) OR phone (digits only)
+    const sql = `
+      SELECT * FROM users 
+      WHERE LOWER(email) = ? 
+         OR REPLACE(REPLACE(REPLACE(phone, '+', ''), '-', ''), ' ', '') = ?
+      LIMIT 1
+    `;
+    
+    db.query(sql, [normalizedEmail, phoneDigits], async (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ message: 'Server error' });
+      }
+
+      if (results.length === 0) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      const user = results[0];
+
+      // Compare password
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      // Optional: update status to online
+      db.query(
+        "UPDATE users SET status='online', last_login=NOW() WHERE userId=?",
+        [user.userId],
+        (err2) => {
+          if (err2) console.error("Error updating status:", err2);
+        }
+      );
+
+      // Create JWT token
+      const token = jwt.sign(
+        { userId: user.userId, email: user.email, role: user.role },
+        JWT_SECRET,
+        { expiresIn: '2h' }
+      );
+
+      res.json({
+        message: 'Login successful',
+        token,
+        user: {
+          userId: user.userId,
+          fullName: user.full_name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role
+        }
+      });
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
-
-
 
 
 
