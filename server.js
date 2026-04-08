@@ -587,7 +587,7 @@ app.post("/api/verify-customer", (req, res) => {
 
   kycCode = kycCode?.trim(); // ✅ Remove spaces
 
-  console.log("Query values:", userId, kycCode);
+  //console.log("Query values:", userId, kycCode);
 
   const query = `
     SELECT * 
@@ -1432,6 +1432,27 @@ app.get("/api/admin/full-loan-kyc", (req, res) => {
   db.query(sql, (err, results) => {
     if (err) return res.status(500).json({ success: false, error: err });
     res.json(results);
+  });
+});
+
+
+// GET single loan details
+app.get("/api/admin/loan/:userId", (req, res) => {
+  const userId = req.params.userId;
+
+  const sql = "SELECT * FROM full_loan_kyc_view WHERE userId = ?";
+
+  db.query(sql, [userId], (err, results) => {
+    if (err) {
+      console.error("Error fetching loan details:", err);
+      return res.status(500).json({ error: "Server error" });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ error: "Loan not found" });
+    }
+
+    res.json(results[0]); // return one record
   });
 });
 
