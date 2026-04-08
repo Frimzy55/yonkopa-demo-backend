@@ -318,7 +318,7 @@ app.post('/signup1', async (req, res) => {
 
 // --- LOGIN ENDPOINT ---
 // --- LOGIN ENDPOINT ---
-app.post('/login', (req, res) => {
+/*app.post('/login', (req, res) => {
   const { identifier, password } = req.body; // identifier can be email or phone
 
   // SQL: check if either email or phone matches
@@ -363,9 +363,78 @@ app.post('/login', (req, res) => {
       }
     });
   });
-}); 
+}); */
 
 // --- LOGIN ENDPOINT ---
+
+
+
+app.post('/login', async (req, res) => {
+  try {
+    let { identifier, password } = req.body;
+
+    if (!identifier || !password)
+      return res.status(400).json({ message: 'Identifier and password required' });
+
+    identifier = identifier.trim(); // remove spaces
+
+    // If it looks like an email, lowercase it
+    const isEmail = identifier.includes('@');
+    if (isEmail) identifier = identifier.toLowerCase();
+
+    // If it looks like a phone, normalize it
+    let phone = null;
+    if (!isEmail) {
+      phone = identifier.replace(/\D/g, ''); // remove non-digits
+      // Optional: convert +233 to 0
+      if (phone.startsWith('233') && phone.length === 12) phone = '0' + phone.slice(3);
+    }
+
+    // Query database
+    const sql = isEmail 
+      ? 'SELECT * FROM users WHERE LOWER(email) = ?'
+      : 'SELECT * FROM users WHERE phone = ?';
+
+    db.query(sql, [isEmail ? identifier : phone], async (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ message: 'Server error' });
+      }
+
+      if (results.length === 0)
+        return res.status(404).json({ message: 'User not found' });
+
+      const user = results[0];
+      const isMatch = await bcrypt.compare(password, user.password);
+
+      if (!isMatch)
+        return res.status(401).json({ message: 'Invalid credentials' });
+
+      // JWT token
+      const token = jwt.sign(
+        { userId: user.userId, email: user.email, role: user.role },
+        JWT_SECRET,
+        { expiresIn: '2h' }
+      );
+
+      res.json({
+        message: 'Login successful',
+        token,
+        user: {
+          userId: user.userId,
+          fullName: user.full_name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role
+        }
+      });
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 
 
