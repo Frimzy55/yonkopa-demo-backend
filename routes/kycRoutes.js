@@ -1,18 +1,23 @@
-// routes/kycRoutes.js
-import express from "express";
-import { upload } from "../middleware/upload.js";
-import { submitKyc } from "../controllers/kycController.js";
-
+const express = require("express");
 const router = express.Router();
 
-router.post(
-  "/submit",
-  upload.fields([
-    { name: "idDocument", maxCount: 1 },
-    { name: "addressProof", maxCount: 1 },
-    { name: "incomeProof", maxCount: 1 }
-  ]),
-  submitKyc
-);
+const { validateStep } = require("../validation/kycValidation");
 
-export default router;
+// STEP VALIDATION ROUTES
+router.post("/validate/personal", validateStep("personal"), (req, res) => {
+  res.json({ success: true, message: "Personal info valid" });
+});
+
+router.post("/validate/contact", validateStep("contact"), (req, res) => {
+  res.json({ success: true, message: "Contact info valid" });
+});
+
+router.post("/validate/employment", validateStep("employment"), (req, res) => {
+  res.json({ success: true, message: "Employment info valid" });
+});
+
+router.post("/validate/reference", validateStep("reference"), (req, res) => {
+  res.json({ success: true, message: "Reference info valid" });
+});
+
+module.exports = router;

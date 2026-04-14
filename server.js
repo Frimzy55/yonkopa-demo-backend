@@ -1062,16 +1062,46 @@ app.get("/api/kyc/check/:userId", (req, res) => {
 
 
 
+// routes/kyc.js or directly in app.js
+app.get("/api/kyc/check-national-id/:nationalId", (req, res) => {
+  const nationalId = req.params.nationalId?.trim().toUpperCase();
 
+  if (!nationalId) {
+    return res.status(400).json({
+      success: false,
+      message: "National ID is required",
+    });
+  }
 
+  const sql = `
+   SELECT pid 
+FROM personal_kyc 
+WHERE TRIM(UPPER(nationalid)) = TRIM(UPPER(?)) 
+LIMIT 1
+  `;
 
+  db.query(sql, [nationalId], (err, result) => {
+    if (err) {
+      console.error("DB error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+    }
 
+    if (result.length > 0) {
+      return res.json({
+        success: true,
+        exists: true,
+      });
+    }
 
-
-
-
-
-
+    return res.json({
+      success: true,
+      exists: false,
+    });
+  });
+});
 
 
 app.put("/api/notifications/mark-read/:userId", (req, res) => {

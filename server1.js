@@ -34,8 +34,15 @@ const app = express();
 // ✅ Use env port
 const PORT = process.env.PORT || 5000;
 
-// ✅ Use JWT secret from env
-const JWT_SECRET = process.env.JWT_SECRET;
+// ✅ Use JWT secret from en
+//const JWT_SECRET = process.env.JWT_SECRET
+const JWT_SECRET = process.env.NODE_ENV === "development" 
+  ? process.env.JWT_SECRET_DEV
+  : process.env.JWT_SECRET_PROD;
+
+const PAYSTACK_SECRET_KEY = process.env.NODE_ENV === "development" 
+  ? process.env.PAYSTACK_SECRET_KEY_DEV
+  : process.env.PAYSTACK_SECRET_KEY_PROD;
 
 //app.use(cors());
 app.use(bodyParser.json());
@@ -44,17 +51,53 @@ app.use(express.json());
 
 //import cors from "cors";
 
-app.use(cors({
-  origin: "http://localhost:3000", // during development
-  credentials: true
-}));
-
 /*app.use(cors({
-  origin: "https://yonkopa-frontend.vercel.app/",
+  origin: "http://localhost:3000", // during development
   credentials: true
 }));*/
 
+/*app.use(cors({
+  origin: "https://yonkopa-frontend-app.vercel.app",
+  credentials: true
+}));8/
 
+
+
+
+
+/*const allowedOrigin = process.env.NODE_ENV === "development"
+  ? process.env.FRONTEND_URL_DEV
+  : process.env.FRONTEND_URL_PROD;
+
+app.use(cors({
+  origin: allowedOrigin,
+  credentials: true
+}));*/
+//app.options('*', cors());
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://yonkopa-frontend.vercel.app",
+  "https://yonkopa-frontend-app.vercel.app"
+];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      console.log("Blocked by CORS:", origin);
+      return callback(null, true); // ✅ DON'T throw error
+    }
+  },
+  credentials: true
+}));
+
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 
 
 
@@ -82,7 +125,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
-const db = mysql.createPool({
+/*const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
@@ -105,17 +148,51 @@ db.getConnection((err, connection) => {
     connection.release();
   }
 });
+*/
+
+
+//import mysql from "mysql2";
+
+const dbConfig = process.env.NODE_ENV === "development" 
+  ? {
+      host: process.env.DB_HOST_DEV,
+      user: process.env.DB_USER_DEV,
+      password: process.env.DB_PASSWORD_DEV,
+      database: process.env.DB_NAME_DEV,
+      port: process.env.DB_PORT_DEV,
+    }
+  : {
+      host: process.env.DB_HOST_PROD,
+      user: process.env.DB_USER_PROD,
+      password: process.env.DB_PASSWORD_PROD,
+      database: process.env.DB_NAME_PROD,
+      port: process.env.DB_PORT_PROD,
+    };
+
+const db = mysql.createPool({
+  ...dbConfig,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
+
+db.getConnection((err, connection) => {
+  if (err) {
+    console.error("❌ Database connection failed:", err);
+  } else {
+    console.log("✅ Connected to MySQL database");
+    connection.release();
+  }
+});
+
+export default db;
 
 
 
 
 
 
-
-
-
-
-// --- SIGNUP customer ENDPOINT ---
+// --- SIGNUP customer ENDPOINT --
 app.post('/signup', async (req, res) => {
   const { fullName, identifier, password, confirmPassword, role } = req.body;
 
@@ -241,7 +318,7 @@ app.post('/signup1', async (req, res) => {
 
 // --- LOGIN ENDPOINT ---
 // --- LOGIN ENDPOINT ---
-app.post('/login', (req, res) => {
+/*app.post('/login', (req, res) => {
   const { identifier, password } = req.body; // identifier can be email or phone
 
   // SQL: check if either email or phone matches
@@ -286,8 +363,78 @@ app.post('/login', (req, res) => {
       }
     });
   });
-});
+}); */
 
+// --- LOGIN ENDPOINT ---
+
+
+
+app.post('/login', async (req, res) => {
+  try {
+    let { identifier, password } = req.body;
+
+    if (!identifier || !password)
+      return res.status(400).json({ message: 'Identifier and password required' });
+
+    identifier = identifier.trim(); // remove spaces
+
+    // If it looks like an email, lowercase it
+    const isEmail = identifier.includes('@');
+    if (isEmail) identifier = identifier.toLowerCase();
+
+    // If it looks like a phone, normalize it
+    let phone = null;
+    if (!isEmail) {
+      phone = identifier.replace(/\D/g, ''); // remove non-digits
+      // Optional: convert +233 to 0
+      if (phone.startsWith('233') && phone.length === 12) phone = '0' + phone.slice(3);
+    }
+
+    // Query database
+    const sql = isEmail 
+      ? 'SELECT * FROM users WHERE LOWER(email) = ?'
+      : 'SELECT * FROM users WHERE phone = ?';
+
+    db.query(sql, [isEmail ? identifier : phone], async (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ message: 'Server error' });
+      }
+
+      if (results.length === 0)
+        return res.status(404).json({ message: 'User not found' });
+
+      const user = results[0];
+      const isMatch = await bcrypt.compare(password, user.password);
+
+      if (!isMatch)
+        return res.status(401).json({ message: 'Invalid credentials' });
+
+      // JWT token
+      const token = jwt.sign(
+        { userId: user.userId, email: user.email, role: user.role },
+        JWT_SECRET,
+        { expiresIn: '2h' }
+      );
+
+      res.json({
+        message: 'Login successful',
+        token,
+        user: {
+          userId: user.userId,
+          fullName: user.full_name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role
+        }
+      });
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 
 
@@ -470,14 +617,22 @@ app.get("/api/admin/loan-progress", (req, res) => {
 
 
 
-app.post("/api/verify-customer",(req, res) => {
+/*app.post("/api/verify-customer",(req, res) => {
   const { userId, kycCode } = req.body;
+    console.log("Incoming data:", req.body); // 👈 ADD THIS
 
-  const query = `
+  //const query = `
+  //SELECT * 
+  // FROM personal_kyc
+   // WHERE userId = ? AND kycCode = ?;
+ // `;
+
+ const query = `
   SELECT * 
-   FROM personal_kyc
-    WHERE userId = ? AND kycCode = ?;
-  `;
+  FROM personal_kyc
+  WHERE userId = ? AND kycCode = ?
+`;
+
 
   db.query(query, [userId, kycCode], (err, results) => {
     if (err) {
@@ -492,6 +647,38 @@ app.post("/api/verify-customer",(req, res) => {
     res.json({
       verified: true,
       customer: results[0], // full joined data
+    });
+  });
+});*/
+
+
+app.post("/api/verify-customer", (req, res) => {
+  let { userId, kycCode } = req.body;
+
+  kycCode = kycCode?.trim(); // ✅ Remove spaces
+
+  //console.log("Query values:", userId, kycCode);
+
+  const query = `
+    SELECT * 
+    FROM personal_kyc
+    WHERE userId = ? AND kycCode = ?
+  `;
+
+  db.query(query, [userId, kycCode], (err, results) => {
+    if (err) {
+      console.error("Verify customer error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (results.length === 0) {
+      console.log("No matching KYC found");
+      return res.json({ verified: false });
+    }
+
+    res.json({
+      verified: true,
+      customer: results[0],
     });
   });
 });
@@ -877,7 +1064,7 @@ app.get("/api/kyc/check/:userId", (req, res) => {
 
 
 
-//app.use("/api/loan", loanRoutes);
+
 
 
 
@@ -1239,7 +1426,7 @@ app.post(
                   });
                 }
 
-                // ================= MOMO =================
+                // ================= MOMO ===========
                 const momoData = {
                   userId,
                   kyc_code: kycCode,
@@ -1315,6 +1502,27 @@ app.get("/api/admin/full-loan-kyc", (req, res) => {
   db.query(sql, (err, results) => {
     if (err) return res.status(500).json({ success: false, error: err });
     res.json(results);
+  });
+});
+
+
+// GET single loan details
+app.get("/api/admin/loan/:userId", (req, res) => {
+  const userId = req.params.userId;
+
+  const sql = "SELECT * FROM full_loan_kyc_view WHERE userId = ?";
+
+  db.query(sql, [userId], (err, results) => {
+    if (err) {
+      console.error("Error fetching loan details:", err);
+      return res.status(500).json({ error: "Server error" });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ error: "Loan not found" });
+    }
+
+    res.json(results[0]); // return one record
   });
 });
 
