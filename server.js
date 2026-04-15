@@ -1382,7 +1382,7 @@ app.post(
           momoProvider, momoNumber, momoAccountName
         } = req.body;
 
-        // ================= APPLICANT =================
+        // ================= APPLICANT ================
         const applicantData = {
           userId, fullName, phone, email, kyc_code: kycCode,  dob: dateofbirth,   // ✅ FIXED,
           gender, nationalid, maritalStatus,
