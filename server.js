@@ -1339,6 +1339,9 @@ app.get("/api/kyc-view/:userId", (req, res) => {
   });
 });
 
+
+
+
 app.post(
   "/api/loan/submit-full-application",
   upload.fields([
@@ -1367,7 +1370,7 @@ app.post(
         }
 
         const {
-          userId, fullName, phone, email, kycCode, dob, gender, nationalid,
+          userId, fullName, phone, email, kycCode, dateofbirth, gender, nationalid,
           maritalStatus, dependents, residentialAddress, residentialGPS,
           employmentStatus, loanAmount, loanPurpose, loanTerm,
           repaymentFrequency, ratePerAnnum, interest, totalInterest,
@@ -1381,7 +1384,7 @@ app.post(
 
         // ================= APPLICANT =================
         const applicantData = {
-          userId, fullName, phone, email, kyc_code: kycCode, dob,
+          userId, fullName, phone, email, kyc_code: kycCode,  dob: dateofbirth,   // ✅ FIXED,
           gender, nationalid, maritalStatus,
           dependents: dependents ? parseInt(dependents) : null,
           residentialAddress, residentialGPS, employmentStatus
