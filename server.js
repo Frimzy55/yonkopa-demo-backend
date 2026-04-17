@@ -1371,7 +1371,7 @@ app.post(
 
         const {
           userId, fullName, phone, email, kycCode, dateofbirth, gender, nationalid,
-          maritalStatus, dependents, residentialAddress, residentialGPS,
+          maritalstatus, dependents, residentialAddress, residentialGPS,
           employmentStatus, loanAmount, loanPurpose, loanTerm,
           repaymentFrequency, ratePerAnnum, interest, totalInterest,
           numberOfPayments, monthlyPayment, loanFees, guarantorName,
@@ -1385,7 +1385,7 @@ app.post(
         // ================= APPLICANT ================
         const applicantData = {
           userId, fullName, phone, email, kyc_code: kycCode,  dob: dateofbirth,   // ✅ FIXED,
-          gender, nationalid, maritalStatus,
+          gender, nationalid, maritalstatus,
           dependents: dependents ? parseInt(dependents) : null,
           residentialAddress, residentialGPS, employmentStatus
         };
