@@ -1877,6 +1877,39 @@ app.get("/loan-check/:userId", (req, res) => {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+app.post("/loan/approve", (req, res) => {
+  const { id } = req.body;
+
+  db.query(
+    `UPDATE momo_details 
+     SET loan_status = 'approved'
+     WHERE id = ?`,
+    [id],
+    (err, result) => {
+      if (err) return res.status(500).json(err);
+      res.json({ message: "Approved" });
+    }
+  );
+});
+
+
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
