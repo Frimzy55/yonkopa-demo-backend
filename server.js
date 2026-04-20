@@ -1893,7 +1893,7 @@ app.get("/loan-check/:userId", (req, res) => {
 
 
 
-app.post("/loan/approve", (req, res) => {
+/*app.post("/loan/approve", (req, res) => {
   const { id } = req.body;
 
   db.query(
@@ -1904,6 +1904,62 @@ app.post("/loan/approve", (req, res) => {
     (err, result) => {
       if (err) return res.status(500).json(err);
       res.json({ message: "Approved" });
+    }
+  );
+});  */
+
+
+
+app.post("/loan/approve", (req, res) => {
+  const { kyc_code } = req.body;
+
+  db.query(
+    `UPDATE momo_details 
+     SET loan_status = 'approved'
+     WHERE kyc_code = ?`,
+    [kyc_code],
+    (err, result) => {
+      if (err) return res.status(500).json(err);
+      res.json({ message: "Approved" });
+    }
+  );
+});
+
+
+
+
+
+
+
+app.get("/api/admin/approved-loans", (req, res) => {
+  db.query(
+    `SELECT * FROM full_loan_kyc_view WHERE loan_status = 'approved'`,
+    (err, result) => {
+      if (err) return res.status(500).json(err);
+      res.json(result);
+    }
+  );
+});
+
+
+
+
+
+
+app.get("/api/admin/loan1/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  db.query(
+    `SELECT * FROM full_loan_kyc_view WHERE userId = ?`,
+    [userId],
+    (err, result) => {
+      if (err) return res.status(500).json(err);
+
+      if (result.length === 0) {
+        return res.status(404).json({ message: "Loan not found" });
+      }
+
+      res.json(result[0]); // ✅ return single record
     }
   );
 });
