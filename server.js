@@ -1799,7 +1799,7 @@ app.get("/api/admin/full-loan-kyc", (req, res) => {
 app.get("/api/admin/loan/:userId", (req, res) => {
   const userId = req.params.userId;
 
-  const sql = "SELECT * FROM full_loan_kyc_view WHERE userId = ?";
+  const sql = "SELECT * FROM full_loan_kyc_view1 WHERE userId = ?";
 
   db.query(sql, [userId], (err, results) => {
     if (err) {
@@ -1975,7 +1975,7 @@ app.post("/loan/approve", (req, res) => {
 
 app.get("/api/admin/approved-loans", (req, res) => {
   db.query(
-    `SELECT * FROM full_loan_kyc_view
+    `SELECT * FROM full_loan_kyc_view1
      WHERE loan_status = 'approved'
      ORDER BY applicant_created_at DESC`,
     (err, results) => {
@@ -2009,6 +2009,47 @@ app.get("/api/admin/loan1/:userId", (req, res) => {
   );
 });
 
+
+
+
+
+
+
+
+app.get("/api/customer/:kyc_code", (req, res) => {
+  const { kyc_code } = req.params;
+
+  db.execute(
+    `
+    SELECT *
+    FROM full_loan_kyc_view1
+    WHERE kyc_code = ? AND loan_status = 'approved'
+    LIMIT 1
+    `,
+    [kyc_code],
+    (err, rows) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({
+          success: false,
+          message: "Server error",
+        });
+      }
+
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "KYC not approved or not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        customer: rows[0],
+      });
+    }
+  );
+});
 
 
 app.listen(PORT, () => {
