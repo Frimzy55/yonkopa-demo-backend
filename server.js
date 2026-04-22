@@ -1795,7 +1795,7 @@ app.get("/loan-check/:userId", (req, res) => {
 
 
 
-app.post("/loan/approve", (req, res) => {
+/*app.post("/loan/approve", (req, res) => {
   const { kyc_code } = req.body;
 
   db.query(
@@ -1808,7 +1808,7 @@ app.post("/loan/approve", (req, res) => {
       res.json({ message: "Approved" });
     }
   );
-});
+});*/
 
 
 /*app.post("/loan/approve", (req, res) => {
