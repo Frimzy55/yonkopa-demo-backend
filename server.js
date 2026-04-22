@@ -1416,122 +1416,6 @@ app.get("/api/kyc/checks-national-id", (req, res) => {
 
 
 
-
-app.post("/api/applications/submit-all", (req, res) => {
-  const data = req.body;
-  //const bc = data.borrowerCredit || {};
-
-  const sql = `
-    INSERT INTO borrower_credit_assessment (
-      loan_id, customer_id, applicant_name, contact_number, credit_officer,
-      loan_type, loan_amount, application_date,
-
-      lending_type, collateral_type, collateral_details,
-
-      is_creditworthy, business_overview, business_location,
-      business_start_date, nearest_landmark, business_description,
-
-      is_able_to_pay,
-
-      current_stock_value, started_business_with, source_of_fund,
-
-      principal, rate, loan_term,
-      interest, monthly_installment,
-
-      gross_margin_percentage, monthly_sales_revenue,
-      cost_of_goods_sold, gross_profit,
-
-      total_operating_expenses, net_business_profit,
-
-      household_expenses, other_income, household_surplus,
-
-      loan_recommendation,
-      expected_monthly_installment,
-      allowable_disposable_loan_service,
-
-      internal_comment, external_comment, decision
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
-  `;
-
-  const values = [
-    data.loanId,
-    data.customerId,
-    data.applicantName,
-    data.contactNumber,
-    data.creditOfficer,
-    data.loanType,
-    data.loanAmount ? Number(data.loanAmount) : null,
-    data.applicationDate,
-
-    data.lendingType || null,
-    data.collateralType || null,
-    JSON.stringify(data.details || {}),
-
-    data.isCreditworthy || false,
-    data.businessOverview || null,
-    data.businessLocation || null,
-    data.businessStartDate || null,
-    data.nearestLandmark || null,
-    data.businessDescription || null,
-
-    data.isAbleToPay || false,
-
-    data.currentStockValue || 0,
-    data.startedBusinessWith || 0,
-    data.sourceOfFund || null,
-
-    data.principal || 0,
-    data.rate || 0,
-    data.loanTerm || 0,
-    data.interest || 0,
-    data.monthlyInstallment || 0,
-
-    data.grossMarginPercentage || 0,
-    data.monthlySalesRevenue || 0,
-    data.costOfGoodsSold || 0,
-    data.grossProfit || 0,
-
-    data.totalOperatingExpenses || 0,
-    data.netBusinessProfit || 0,
-
-    data.householdExpenses || 0,
-    data.otherIncome || 0,
-    data.householdSurplus || 0,
-
-    data.loanRecommendation || 0,
-    data.expectedMonthlyInstallment || 0,
-    data.allowableDisposableLoanService || 0,
-
-    data.internalComment || null,
-    data.externalComment || null,
-    data.decision || "pending",
-  ];
-
-  db.query(sql, values, (err, result) => {
-    if (err) {
-      console.error("Database insert error:", err);
-      return res.status(500).json({
-        success: false,
-        message: "Database error",
-        error: err
-      });
-    }
-
-    res.json({
-      success: true,
-      message: "Application submitted successfully",
-      id: result.insertId
-    });
-  });
-});
-
-
-
-
-
-
-
 // Change from kycCode to userId
 
 
@@ -1787,7 +1671,7 @@ app.get("/api/loan-status/:userId", (req, res) => {
 
 // backend/routes/admin.js
 app.get("/api/admin/full-loan-kyc", (req, res) => {
-  const sql = "SELECT * FROM full_loan_kyc_view1 ORDER BY applicant_created_at DESC";
+  const sql = "SELECT * FROM full_loan_kyc_view2 ORDER BY applicant_created_at DESC";
   db.query(sql, (err, results) => {
     if (err) return res.status(500).json({ success: false, error: err });
     res.json(results);
@@ -1799,7 +1683,7 @@ app.get("/api/admin/full-loan-kyc", (req, res) => {
 app.get("/api/admin/loan/:userId", (req, res) => {
   const userId = req.params.userId;
 
-  const sql = "SELECT * FROM full_loan_kyc_view1 WHERE userId = ?";
+  const sql = "SELECT * FROM full_loan_kyc_view2 WHERE userId = ?";
 
   db.query(sql, [userId], (err, results) => {
     if (err) {
@@ -1876,7 +1760,7 @@ app.get("/loan-check/:userId", (req, res) => {
   const { userId } = req.params;
 
   db.query(
-    "SELECT 1 FROM full_loan_view WHERE userId = ? LIMIT 1",
+    "SELECT 1 FROM full_loan_kyc_view WHERE userId = ? LIMIT 1",
     [userId],
     (err, rows) => {
       if (err) {
@@ -1975,7 +1859,7 @@ app.post("/loan/approve", (req, res) => {
 
 app.get("/api/admin/approved-loans", (req, res) => {
   db.query(
-    `SELECT * FROM full_loan_kyc_view1
+    `SELECT * FROM full_loan_kyc_view2
      WHERE loan_status = 'approved'
      ORDER BY applicant_created_at DESC`,
     (err, results) => {
@@ -2049,6 +1933,76 @@ app.get("/api/customer/:kyc_code", (req, res) => {
       });
     }
   );
+});
+
+
+
+
+
+
+
+
+app.post("/api/accounts/create", (req, res) => {
+  const {
+    kyc_code,
+    firstName,
+    lastName,
+    otherName,
+    dob,
+    gender,
+    branch,
+    productType,
+    accountName,
+    accountDescription,
+    accountMandate,
+  } = req.body;
+
+  const sql = `
+    INSERT INTO accounts (
+      kyc_code,
+      firstName,
+      lastName,
+      otherName,
+      dob,
+      gender,
+      branch,
+      productType,
+      accountName,
+      accountDescription,
+      accountMandate,
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+  `;
+
+  const values = [
+    kyc_code,
+    firstName,
+    lastName,
+    otherName,
+    dob,
+    gender,
+    branch,
+    productType,
+    accountName,
+    accountDescription,
+    accountMandate,
+  ];
+
+  db.execute(sql, values, (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to create account",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Account created successfully",
+      accountId: result.insertId,
+    });
+  });
 });
 
 
