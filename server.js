@@ -1070,14 +1070,15 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
     await connection.query(`
       INSERT INTO contact_kyc (
         userId, mobileNumber, email, residentialAddress,
-        residentialLandmark, city, state, alternatePhone
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        residentialLandmark, city, state, alternatePhone,kyc_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)
       ON DUPLICATE KEY UPDATE
         residentialAddress=VALUES(residentialAddress),
         residentialLandmark=VALUES(residentialLandmark),
         city=VALUES(city),
         state=VALUES(state),
-        alternatePhone=VALUES(alternatePhone)
+        alternatePhone=VALUES(alternatePhone),
+         kyc_code=VALUES(kyc_code)
     `, [
       userId,
       req.body.mobileNumber,
@@ -1086,7 +1087,9 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
       req.body.residentialLandmark,
       req.body.city,
       req.body.state,
-      req.body.alternatePhone
+      req.body.alternatePhone,
+       kycCode   // ✅ ADD THIS
+
     ]);
 
     // =========================
@@ -1099,8 +1102,8 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
         payslip, ghanaCardFront, ghanaCardBack, employmentId,
         businessName, businessType, monthlyBusinessIncome,
         businessLocation, businessGpsAddress, numberOfWorkers,
-        yearsInBusiness, workingCapital, businessPicture
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        yearsInBusiness, workingCapital, businessPicture,kyc_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
       ON DUPLICATE KEY UPDATE
         employmentStatus=VALUES(employmentStatus),
         employerName=VALUES(employerName),
@@ -1120,7 +1123,8 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
         numberOfWorkers=VALUES(numberOfWorkers),
         yearsInBusiness=VALUES(yearsInBusiness),
         workingCapital=VALUES(workingCapital),
-        businessPicture=VALUES(businessPicture)
+        businessPicture=VALUES(businessPicture),
+        kyc_code=VALUES(kyc_code)
     `, [
       userId,
       req.body.employmentStatus,
@@ -1141,7 +1145,8 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
       toNull(req.body.numberOfWorkers),
       toNull(req.body.yearsInBusiness),
       toNull(req.body.workingCapital),
-      req.files.businessPicture?.[0]?.filename || null
+      req.files.businessPicture?.[0]?.filename || null,
+         kycCode   // ✅ ADD THIS
     ]);
 
     // =========================
@@ -1150,15 +1155,16 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
     await connection.query(`
       INSERT INTO reference_kyc (
         userId, referenceName1, referencePhone1, referenceRelationship1,
-        referenceName2, referencePhone2, referenceRelationship2
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        referenceName2, referencePhone2, referenceRelationship2,kyc_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?,?)
       ON DUPLICATE KEY UPDATE
         referenceName1=VALUES(referenceName1),
         referencePhone1=VALUES(referencePhone1),
         referenceRelationship1=VALUES(referenceRelationship1),
         referenceName2=VALUES(referenceName2),
         referencePhone2=VALUES(referencePhone2),
-        referenceRelationship2=VALUES(referenceRelationship2)
+        referenceRelationship2=VALUES(referenceRelationship2),
+        kyc_code=VALUES(kyc_code)
     `, [
       userId,
       req.body.referenceName1,
@@ -1166,32 +1172,13 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
       req.body.referenceRelationship1,
       req.body.referenceName2,
       req.body.referencePhone2,
-      req.body.referenceRelationship2
+      req.body.referenceRelationship2,
+       kycCode   // ✅ ADD THIS
     ]);
 
     // =========================
     // 5. CLONE TABLES (FINAL STEP)
     // =========================
-
-    await connection.query(`
-      INSERT INTO clone_personal_kyc
-      SELECT * FROM personal_kyc WHERE pid = ?
-    `, [pid]);
-
-    await connection.query(`
-      INSERT INTO clone_contact_kyc
-      SELECT * FROM contact_kyc WHERE userId = ?
-    `, [userId]);
-
-    await connection.query(`
-      INSERT INTO clone_employment_kyc
-      SELECT * FROM employment_kyc WHERE userId = ?
-    `, [userId]);
-
-    await connection.query(`
-      INSERT INTO clone_reference_kyc
-      SELECT * FROM reference_kyc WHERE userId = ?
-    `, [userId]);
 
     await connection.commit();
 
@@ -1936,13 +1923,8 @@ app.get("/api/customer/:kyc_code", (req, res) => {
 });
 
 
-
-
-
-
-
-
-app.post("/api/accounts/create", (req, res) => {
+   
+app.post("/api/accounts/create", upload.single("image"), (req, res) => {
   const {
     kyc_code,
     firstName,
@@ -1957,21 +1939,13 @@ app.post("/api/accounts/create", (req, res) => {
     accountMandate,
   } = req.body;
 
+  const image = req.file ? req.file.filename : null;
+
   const sql = `
-    INSERT INTO accounts (
-      kyc_code,
-      firstName,
-      lastName,
-      otherName,
-      dob,
-      gender,
-      branch,
-      productType,
-      accountName,
-      accountDescription,
-      accountMandate,
-      created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    INSERT INTO accounts 
+    (kyc_code, firstName, lastName, otherName, dob, gender, branch,
+     productType, accountName, accountDescription, accountMandate, image)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   const values = [
@@ -1986,24 +1960,22 @@ app.post("/api/accounts/create", (req, res) => {
     accountName,
     accountDescription,
     accountMandate,
+    image,
   ];
 
-  db.execute(sql, values, (err, result) => {
+  db.query(sql, values, (err, result) => {
     if (err) {
-      console.error(err);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to create account",
-      });
+      return res.json({ success: false, message: err.message });
     }
 
     return res.json({
       success: true,
-      message: "Account created successfully",
+      message: "Account created",
       accountId: result.insertId,
     });
   });
 });
+
 
 
 app.listen(PORT, () => {
