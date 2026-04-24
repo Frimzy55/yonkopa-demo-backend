@@ -176,6 +176,8 @@ const db = mysql.createPool({
   queueLimit: 0
 });
 
+const dbPromise = db.promise();
+
 db.getConnection((err, connection) => {
   if (err) {
     console.error("❌ Database connection failed:", err);
@@ -1976,6 +1978,288 @@ app.post("/api/accounts/create", upload.single("image"), (req, res) => {
   });
 });
 
+
+
+
+
+
+
+
+
+/* app.post("/loan/reject", (req, res) => {
+  const { loan_id } = req.body;
+
+  if (!loan_id) {
+    return res.status(400).json({ error: "loan_id is required" });
+  }
+
+  const sql = `
+    UPDATE momo_details 
+    SET loan_status = 'rejected' 
+    WHERE loan_id = ?
+  `;
+
+  db.query(sql, [loan_id], (err, result) => {
+    if (err) {
+      console.error("Error rejecting loan:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Loan not found" });
+    }
+
+    res.json({
+      message: "Loan rejected successfully",
+      loan_id,
+    });
+  });
+});*/
+
+app.post("/loan/reject", (req, res) => {
+  const { loan_id } = req.body;
+
+  if (!loan_id) {
+    return res.status(400).json({ error: "loan_id is required" });
+  }
+
+  const sql = `
+    UPDATE momo_details 
+    SET loan_status = 'rejected',
+        is_deleted = 1
+    WHERE loan_id = ?
+  `;
+
+  db.query(sql, [loan_id], (err, result) => {
+    if (err) {
+      console.error("Error rejecting loan:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Loan not found" });
+    }
+
+    res.json({
+      message: "Loan rejected and soft deleted successfully",
+      loan_id,
+    });
+  });
+});
+
+
+// =========================
+// SAFE HELPER (FIX FOR UNDEFINED ERROR)
+// =========================
+const safe = (value) => (value === undefined ? null : value);
+
+// =========================
+// LOAN EVALUATION API
+// =========================
+app.post("/api/loan/evaluate", async (req, res) => {
+  const connection = await dbPromise.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const { loan, collateral, creditData, finalDecision } = req.body;
+
+    const loanId = loan.loan_id || loan.id;
+
+    // 🚨 Ensure kyc_code exists
+    if (!loan?.kyc_code) {
+      throw new Error("kyc_code is required to update momo_details");
+    }
+
+    // =========================
+    // 1. LOANS_EVAL TABLE
+    // =========================
+    await connection.execute(
+      `INSERT INTO loans_eval (
+        loan_id,
+        kyc_code,
+        applicant_fullName,
+        mobileNumber,
+        loanAmount,
+        loan_status,
+        loanPurpose,
+        applicant_created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(loan.kyc_code),
+        safe(loan.applicant_fullName),
+        safe(loan.mobileNumber),
+        safe(loan.loanAmount),
+        safe(loan.loan_status),
+        safe(loan.loanPurpose),
+        safe(loan.applicant_created_at),
+      ]
+    );
+
+    // =========================
+    // 2. COLLATERAL TABLE
+    // =========================
+    await connection.execute(
+      `INSERT INTO loan_collaterals (
+        loan_id,
+        lending_type,
+        collateral_type,
+        collateral_data
+      ) VALUES (?, ?, ?, ?)`,
+      [
+        safe(loanId),
+
+        // enforce enum values
+        collateral?.lendingType === "secured" || collateral?.lendingType === "unsecured"
+          ? collateral.lendingType
+          : null,
+
+        safe(collateral?.collateralType),
+
+        JSON.stringify(collateral?.formData || {}),
+      ]
+    );
+
+    // =========================
+    // 3. CREDIT ASSESSMENT
+    // =========================
+    await connection.execute(
+      `INSERT INTO borrower_credit_assessments (
+        loan_id,
+        is_creditworthy,
+        is_able_to_pay,
+        business_overview,
+        business_location,
+        business_start_date,
+        nearest_landmark,
+        business_description,
+        current_stock_value,
+        started_business_with,
+        source_of_fund,
+        principal,
+        rate,
+        loan_term,
+        interest,
+        loan_amount,
+        monthly_installment,
+        gross_margin_percentage,
+        monthly_sales_revenue,
+        cost_of_goods_sold,
+        gross_profit,
+        total_operating_expenses,
+        net_business_profit,
+        household_expenses,
+        other_income,
+        household_surplus,
+        loan_recommendation,
+        pay_capacity,
+        extra_data
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        creditData.isCreditworthy ? 1 : 0,
+        creditData.isAbleToPay ? 1 : 0,
+        safe(creditData.businessOverview),
+        safe(creditData.businessLocation),
+        safe(creditData.businessStartDate),
+        safe(creditData.nearestLandmark),
+        safe(creditData.businessDescription),
+        safe(creditData.currentStockValue),
+        safe(creditData.startedBusinessWith),
+        safe(creditData.sourceOfFund),
+        safe(creditData.principal),
+        safe(creditData.rate),
+        safe(creditData.loanTerm),
+        safe(creditData.interest),
+        safe(creditData.loanAmount),
+        safe(creditData.monthlyInstallment),
+        safe(creditData.grossMarginPercentage),
+        safe(creditData.monthlySalesRevenue),
+        safe(creditData.costOfGoodsSold),
+        safe(creditData.grossProfit),
+        safe(creditData.totalOperatingExpenses),
+        safe(creditData.netBusinessProfit),
+        safe(creditData.householdExpenses),
+        safe(creditData.otherIncome),
+        safe(creditData.householdSurplus),
+        safe(creditData.loanRecommendation),
+        safe(creditData.payCapacity),
+        JSON.stringify(creditData.extraData || {}),
+      ]
+    );
+
+    // =========================
+    // 4. FINAL DECISION
+    // =========================
+    await connection.execute(
+      `INSERT INTO loan_final_decisions (
+        loan_id,
+        comments,
+        is_confirmed
+      ) VALUES (?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(finalDecision.comments),
+        finalDecision.confirmed ? 1 : 0,
+      ]
+    );
+
+    // =========================
+    // 5. SOFT DELETE MOMO DETAILS ✅
+    // =========================
+    const [momoResult] = await connection.execute(
+      `UPDATE momo_details 
+       SET is_deleted = 1 
+       WHERE kyc_code = ?`,
+      [safe(loan.kyc_code)]
+    );
+
+    if (momoResult.affectedRows === 0) {
+      console.warn("⚠️ No momo_details record found for this kyc_code");
+    }
+
+    // =========================
+    // COMMIT TRANSACTION
+    // =========================
+    await connection.commit();
+
+    res.json({
+      message: "Loan evaluation saved & momo details updated successfully",
+      loan_id: loanId,
+    });
+
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("❌ Evaluation Error:", error);
+
+    res.status(500).json({
+      message: "Error saving loan evaluation",
+      error: error.message,
+    });
+
+  } finally {
+    connection.release();
+  }
+});
+
+app.get("/api/admin/loan-full-view-evaluation", (req, res) => {
+  db.query(
+    "SELECT * FROM loan_master",
+    (err, rows) => {
+      if (err) {
+        console.error("DB Error:", err);
+        return res.status(500).json({
+          message: "Database error",
+          error: err.message,
+        });
+      }
+
+      res.json(rows);
+    }
+  );
+});
 
 
 app.listen(PORT, () => {
