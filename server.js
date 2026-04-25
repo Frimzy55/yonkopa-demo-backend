@@ -2244,9 +2244,37 @@ app.post("/api/loan/evaluate", async (req, res) => {
   }
 });
 
+
 app.get("/api/admin/loan-full-view-evaluation", (req, res) => {
+  const query = `
+    SELECT * 
+    FROM loan_master2
+    WHERE loan_eval_id IS NOT NULL 
+    AND loan_eval_id != ''
+  `;
+
+  db.query(query, (err, rows) => {
+    if (err) {
+      console.error("DB Error:", err);
+      return res.status(500).json({
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    res.json(rows);
+  });
+});
+
+
+
+
+app.get("/api/admin/loan1/:loan_id", (req, res) => {
+  const { loan_id } = req.params;
+
   db.query(
-    "SELECT * FROM loan_master",
+    "SELECT * FROM loan_master1 WHERE loan_id = ?",
+    [loan_id],
     (err, rows) => {
       if (err) {
         console.error("DB Error:", err);
@@ -2256,7 +2284,13 @@ app.get("/api/admin/loan-full-view-evaluation", (req, res) => {
         });
       }
 
-      res.json(rows);
+      if (rows.length === 0) {
+        return res.status(404).json({
+          message: "Loan not found",
+        });
+      }
+
+      res.json(rows[0]); // return single loan
     }
   );
 });
