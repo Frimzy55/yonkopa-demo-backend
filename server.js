@@ -2051,7 +2051,7 @@ app.post("/loan/reject", (req, res) => {
 // =========================
 // SAFE HELPER (FIX FOR UNDEFINED ERROR)
 // =========================
-const safe = (value) => (value === undefined ? null : value);
+/* const safe = (value) => (value === undefined ? null : value);
 
 // =========================
 // LOAN EVALUATION API
@@ -2242,13 +2242,226 @@ app.post("/api/loan/evaluate", async (req, res) => {
   } finally {
     connection.release();
   }
+});*/
+
+
+// =========================
+// HELPER FUNCTIONS
+// =========================
+const formatMySQLDate = (date) => {
+  if (!date) return null;
+
+  const d = new Date(date);
+  if (isNaN(d)) return null;
+
+  const pad = (n) => n.toString().padStart(2, '0');
+
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+         `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
+
+// Optional safe helper (if not already defined)
+const safe = (val) => (val === undefined ? null : val);
+
+// =========================
+// LOAN EVALUATION API
+// =========================
+app.post("/api/loan/evaluate", async (req, res) => {
+  const connection = await dbPromise.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const { loan, collateral, creditData, finalDecision } = req.body;
+
+    const loanId = loan.loan_id || loan.id;
+
+    // 🚨 Ensure kyc_code exists
+    if (!loan?.kyc_code) {
+      throw new Error("kyc_code is required to update momo_details");
+    }
+
+    // =========================
+    // 1. LOANS_EVAL TABLE
+    // =========================
+    await connection.execute(
+      `INSERT INTO loans_eval (
+        loan_id,
+        kyc_code,
+        applicant_fullName,
+        mobileNumber,
+        loanAmount,
+        loan_status,
+        loanPurpose,
+        applicant_created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(loan.kyc_code),
+        safe(loan.applicant_fullName),
+        safe(loan.mobileNumber),
+        safe(loan.loanAmount),
+        safe(loan.loan_status),
+        safe(loan.loanPurpose),
+
+        // ✅ FIXED DATE FORMAT HERE
+        formatMySQLDate(loan.applicant_created_at),
+      ]
+    );
+
+    // =========================
+    // 2. COLLATERAL TABLE
+    // =========================
+    await connection.execute(
+      `INSERT INTO loan_collaterals (
+        loan_id,
+        lending_type,
+        collateral_type,
+        collateral_data
+      ) VALUES (?, ?, ?, ?)`,
+      [
+        safe(loanId),
+
+        collateral?.lendingType === "secured" || collateral?.lendingType === "unsecured"
+          ? collateral.lendingType
+          : null,
+
+        safe(collateral?.collateralType),
+        JSON.stringify(collateral?.formData || {}),
+      ]
+    );
+
+    // =========================
+    // 3. CREDIT ASSESSMENT
+    // =========================
+    await connection.execute(
+      `INSERT INTO borrower_credit_assessments (
+        loan_id,
+        is_creditworthy,
+        is_able_to_pay,
+        business_overview,
+        business_location,
+        business_start_date,
+        nearest_landmark,
+        business_description,
+        current_stock_value,
+        started_business_with,
+        source_of_fund,
+        principal,
+        rate,
+        loan_term,
+        interest,
+        loan_amount,
+        monthly_installment,
+        gross_margin_percentage,
+        monthly_sales_revenue,
+        cost_of_goods_sold,
+        gross_profit,
+        total_operating_expenses,
+        net_business_profit,
+        household_expenses,
+        other_income,
+        household_surplus,
+        loan_recommendation,
+        pay_capacity,
+        extra_data
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        creditData.isCreditworthy ? 1 : 0,
+        creditData.isAbleToPay ? 1 : 0,
+        safe(creditData.businessOverview),
+        safe(creditData.businessLocation),
+
+        // ✅ ALSO FIX THIS DATE (important!)
+        formatMySQLDate(creditData.businessStartDate),
+
+        safe(creditData.nearestLandmark),
+        safe(creditData.businessDescription),
+        safe(creditData.currentStockValue),
+        safe(creditData.startedBusinessWith),
+        safe(creditData.sourceOfFund),
+        safe(creditData.principal),
+        safe(creditData.rate),
+        safe(creditData.loanTerm),
+        safe(creditData.interest),
+        safe(creditData.loanAmount),
+        safe(creditData.monthlyInstallment),
+        safe(creditData.grossMarginPercentage),
+        safe(creditData.monthlySalesRevenue),
+        safe(creditData.costOfGoodsSold),
+        safe(creditData.grossProfit),
+        safe(creditData.totalOperatingExpenses),
+        safe(creditData.netBusinessProfit),
+        safe(creditData.householdExpenses),
+        safe(creditData.otherIncome),
+        safe(creditData.householdSurplus),
+        safe(creditData.loanRecommendation),
+        safe(creditData.payCapacity),
+        JSON.stringify(creditData.extraData || {}),
+      ]
+    );
+
+    // =========================
+    // 4. FINAL DECISION
+    // =========================
+    await connection.execute(
+      `INSERT INTO loan_final_decisions (
+        loan_id,
+        comments,
+        is_confirmed
+      ) VALUES (?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(finalDecision.comments),
+        finalDecision.confirmed ? 1 : 0,
+      ]
+    );
+
+    // =========================
+    // 5. SOFT DELETE MOMO DETAILS
+    // =========================
+    const [momoResult] = await connection.execute(
+      `UPDATE momo_details 
+       SET is_deleted = 1 
+       WHERE kyc_code = ?`,
+      [safe(loan.kyc_code)]
+    );
+
+    if (momoResult.affectedRows === 0) {
+      console.warn("⚠️ No momo_details record found for this kyc_code");
+    }
+
+    // =========================
+    // COMMIT
+    // =========================
+    await connection.commit();
+
+    res.json({
+      message: "Loan evaluation saved & momo details updated successfully",
+      loan_id: loanId,
+    });
+
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("❌ Evaluation Error:", error);
+
+    res.status(500).json({
+      message: "Error saving loan evaluation",
+      error: error.message,
+    });
+
+  } finally {
+    connection.release();
+  }
 });
 
 
 app.get("/api/admin/loan-full-view-evaluation", (req, res) => {
   const query = `
     SELECT * 
-    FROM loan_master2
+    FROM loan_master4
     WHERE loan_eval_id IS NOT NULL 
     AND loan_eval_id != ''
   `;
@@ -2294,6 +2507,86 @@ app.get("/api/admin/loan1/:loan_id", (req, res) => {
     }
   );
 });
+
+
+
+
+app.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
+  const { loan_id } = req.params;
+
+  try {
+    const query = `
+      UPDATE momo_details
+      SET 
+        loan_status = 'approved',
+        approved_date = NOW()
+      WHERE loan_id = ? 
+     
+    `;
+
+    db.query(query, [loan_id], (err, result) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Database error",
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Loan not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Loan approved successfully",
+      });
+    });
+  } catch (error) {
+    console.error("Server Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});
+
+
+
+
+
+
+app.get("/api/admin/approved-loan", (req, res) => {
+  const query = `
+    SELECT 
+      applicant_fullName,
+      mobileNumber,
+      applicant_phone,
+      kyc_loan_amount,
+      approved_date
+    FROM loan_master4
+    WHERE loan_status = 'approved'
+    ORDER BY approved_date DESC
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("Database Error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error"
+      });
+    }
+
+    return res.status(200).json(results);
+  });
+});
+
+
+
 
 
 app.listen(PORT, () => {
