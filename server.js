@@ -285,6 +285,98 @@ app.post('/signup', async (req, res) => {
   }
 });
 
+
+
+
+
+app.post('/signup2', async (req, res) => {
+  const { fullName, full_name, identifier, password, confirmPassword, role } = req.body;
+
+  const name = fullName || full_name;
+
+  console.log('Received data:', { name, identifier, role });
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ message: "Full name is required" });
+  }
+
+  if (!identifier || !identifier.trim()) {
+    return res.status(400).json({ message: "Email or phone number is required" });
+  }
+
+  if (!password) {
+    return res.status(400).json({ message: "Password is required" });
+  }
+
+  if (password !== confirmPassword) {
+    return res.status(400).json({ message: "Passwords do not match" });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters" });
+  }
+
+  const passwordRegex = /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
+  if (!passwordRegex.test(password)) {
+    return res.status(400).json({
+      message: "Password must contain uppercase, lowercase, and a number"
+    });
+  }
+
+  try {
+    let email = null;
+    let phone = null;
+
+    const cleanIdentifier = identifier.trim();
+
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanIdentifier);
+    const phoneDigits = cleanIdentifier.replace(/\D/g, '');
+    const isPhone = /^\d{10,12}$/.test(phoneDigits);
+
+    if (isEmail) {
+      email = cleanIdentifier.toLowerCase();
+    } else if (isPhone) {
+      phone = phoneDigits;
+    } else {
+      return res.status(400).json({
+        message: "Enter valid email or phone number"
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const userRole = role || "customer";
+
+    const insertSql = `
+      INSERT INTO users (full_name, email, phone, password, role, created_at)
+      VALUES (?, ?, ?, ?, ?, NOW())
+    `;
+
+    db.query(
+      insertSql,
+      [name.trim(), email, phone, hashedPassword, userRole],
+      (err, result) => {
+        if (err) {
+          console.error("Insert error:", err);
+          return res.status(500).json({ message: "Error creating account" });
+        }
+
+        res.status(201).json({
+          message: "Account created successfully",
+          userId: result.insertId
+        });
+      }
+    );
+
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+
+
+
 // Signup admin endpoint
 app.post('/signup1', async (req, res) => {
   const { full_name, email, phone, password, role } = req.body;
@@ -688,7 +780,7 @@ app.post("/api/verify-customer", (req, res) => {
 
 
 
-app.get("/userss",authenticateToken,(req, res) => {
+/*app.get("/userss",authenticateToken,(req, res) => {
   const sql = `
     SELECT id, full_name, email, phone, role, created_at
     FROM users
@@ -698,76 +790,71 @@ app.get("/userss",authenticateToken,(req, res) => {
     if (err) return res.status(500).json(err);
     res.json(results);
   });
-});
+});*/
 
 
-
-
-
-app.get("/users",authenticateToken, (req, res) => {
+app.get('/getusers', (req, res) => {
   const sql = `
-    SELECT id, full_name, email, phone, role, created_at
+    SELECT userId, full_name, email, phone, role, created_at
     FROM users
-    WHERE role IN ('admin', 'loan_officer')
+    ORDER BY created_at DESC
   `;
+
   db.query(sql, (err, results) => {
-    if (err) return res.status(500).json(err);
-    res.json(results);
+    if (err) {
+      console.error('Fetch users error:', err);
+      return res.status(500).json({ message: 'Failed to fetch users' });
+    }
+
+    const formattedUsers = results.map((user) => ({
+      id: user.userId,
+      full_name: user.full_name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      username: user.email || user.phone,
+      created_at: user.created_at
+    }));
+
+    res.json(formattedUsers);
   });
 });
 
-// GET single user by ID (optional)
-app.get("/users/:id", (req, res) => {
+
+
+
+
+
+app.put('/users/:id', (req, res) => {
   const { id } = req.params;
-  const sql = "SELECT id, full_name, email, phone, role, created_at FROM users WHERE id = ?";
-  db.query(sql, [id], (err, results) => {
-    if (err) return res.status(500).json(err);
-    res.json(results[0]);
-  });
-});
+  const { fullName, identifier, role } = req.body;
 
-// CREATE user
-app.post("/users", async (req, res) => {
-  const { full_name, email, phone, password, role } = req.body;
+  let email = null;
+  let phone = null;
 
-  // Hash 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  if (identifier) {
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
 
-  const sql = "INSERT INTO users (full_name, email, phone, password, role) VALUES (?, ?, ?, ?, ?)";
-  db.query(sql, [full_name, email, phone, hashedPassword, role], (err, results) => {
-    if (err) return res.status(500).json(err);
-    res.json({ message: "User created", id: results.insertId });
-  });
-});
-
-// UPDATE user
-app.put("/users/:id", async (req, res) => {
-  const { id } = req.params;
-  const { full_name, email, phone, password, role } = req.body;
-
-  let sql, params;
-  if (password) {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    sql = "UPDATE users SET full_name=?, email=?, phone=?, password=?, role=? WHERE id=?";
-    params = [full_name, email, phone, hashedPassword, role, id];
-  } else {
-    sql = "UPDATE users SET full_name=?, email=?, phone=?, role=? WHERE id=?";
-    params = [full_name, email, phone, role, id];
+    if (isEmail) {
+      email = identifier;
+    } else {
+      phone = identifier.replace(/\D/g, '');
+    }
   }
 
-  db.query(sql, params, (err, results) => {
-    if (err) return res.status(500).json(err);
-    res.json({ message: "User updated" });
-  });
-});
+  const sql = `
+    UPDATE users
+    SET full_name = ?, email = ?, phone = ?, role = ?
+    WHERE userId = ?
+  `;
 
-// DELETE user
-app.delete("/users/:id", (req, res) => {
-  const { id } = req.params;
-  const sql = "DELETE FROM users WHERE id=?";
-  db.query(sql, [id], (err, results) => {
-    if (err) return res.status(500).json(err);
-    res.json({ message: "User deleted" });
+  db.query(sql, [fullName, email, phone, role, id], (err) => {
+    if (err) {
+      console.error('Update user error:', err);
+      return res.status(500).json({ message: 'Failed to update user' });
+    }
+
+    res.json({ message: 'User updated successfully' });
   });
 });
 
@@ -781,6 +868,33 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
+
+
+
+app.delete('/users/:id', (req, res) => {
+  const { id } = req.params;
+
+  const sql = 'DELETE FROM users WHERE userId = ?';
+
+  db.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error('Delete user error:', err);
+      return res.status(500).json({
+        message: 'Failed to delete user'
+      });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      message: 'User deleted successfully'
+    });
+  });
+});
 // ==============================
 // ✅ MULTER CONFIG
 // ==============================

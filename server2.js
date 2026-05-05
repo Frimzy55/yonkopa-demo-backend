@@ -176,6 +176,8 @@ const db = mysql.createPool({
   queueLimit: 0
 });
 
+const dbPromise = db.promise();
+
 db.getConnection((err, connection) => {
   if (err) {
     console.error("❌ Database connection failed:", err);
@@ -1070,14 +1072,15 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
     await connection.query(`
       INSERT INTO contact_kyc (
         userId, mobileNumber, email, residentialAddress,
-        residentialLandmark, city, state, alternatePhone
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        residentialLandmark, city, state, alternatePhone,kyc_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)
       ON DUPLICATE KEY UPDATE
         residentialAddress=VALUES(residentialAddress),
         residentialLandmark=VALUES(residentialLandmark),
         city=VALUES(city),
         state=VALUES(state),
-        alternatePhone=VALUES(alternatePhone)
+        alternatePhone=VALUES(alternatePhone),
+         kyc_code=VALUES(kyc_code)
     `, [
       userId,
       req.body.mobileNumber,
@@ -1086,7 +1089,9 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
       req.body.residentialLandmark,
       req.body.city,
       req.body.state,
-      req.body.alternatePhone
+      req.body.alternatePhone,
+       kycCode   // ✅ ADD THIS
+
     ]);
 
     // =========================
@@ -1099,8 +1104,8 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
         payslip, ghanaCardFront, ghanaCardBack, employmentId,
         businessName, businessType, monthlyBusinessIncome,
         businessLocation, businessGpsAddress, numberOfWorkers,
-        yearsInBusiness, workingCapital, businessPicture
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        yearsInBusiness, workingCapital, businessPicture,kyc_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
       ON DUPLICATE KEY UPDATE
         employmentStatus=VALUES(employmentStatus),
         employerName=VALUES(employerName),
@@ -1120,7 +1125,8 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
         numberOfWorkers=VALUES(numberOfWorkers),
         yearsInBusiness=VALUES(yearsInBusiness),
         workingCapital=VALUES(workingCapital),
-        businessPicture=VALUES(businessPicture)
+        businessPicture=VALUES(businessPicture),
+        kyc_code=VALUES(kyc_code)
     `, [
       userId,
       req.body.employmentStatus,
@@ -1141,7 +1147,8 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
       toNull(req.body.numberOfWorkers),
       toNull(req.body.yearsInBusiness),
       toNull(req.body.workingCapital),
-      req.files.businessPicture?.[0]?.filename || null
+      req.files.businessPicture?.[0]?.filename || null,
+         kycCode   // ✅ ADD THIS
     ]);
 
     // =========================
@@ -1150,15 +1157,16 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
     await connection.query(`
       INSERT INTO reference_kyc (
         userId, referenceName1, referencePhone1, referenceRelationship1,
-        referenceName2, referencePhone2, referenceRelationship2
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        referenceName2, referencePhone2, referenceRelationship2,kyc_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?,?)
       ON DUPLICATE KEY UPDATE
         referenceName1=VALUES(referenceName1),
         referencePhone1=VALUES(referencePhone1),
         referenceRelationship1=VALUES(referenceRelationship1),
         referenceName2=VALUES(referenceName2),
         referencePhone2=VALUES(referencePhone2),
-        referenceRelationship2=VALUES(referenceRelationship2)
+        referenceRelationship2=VALUES(referenceRelationship2),
+        kyc_code=VALUES(kyc_code)
     `, [
       userId,
       req.body.referenceName1,
@@ -1166,32 +1174,13 @@ app.post("/api/kyc/save-all", authenticateToken, upload.fields([
       req.body.referenceRelationship1,
       req.body.referenceName2,
       req.body.referencePhone2,
-      req.body.referenceRelationship2
+      req.body.referenceRelationship2,
+       kycCode   // ✅ ADD THIS
     ]);
 
     // =========================
     // 5. CLONE TABLES (FINAL STEP)
     // =========================
-
-    await connection.query(`
-      INSERT INTO clone_personal_kyc
-      SELECT * FROM personal_kyc WHERE pid = ?
-    `, [pid]);
-
-    await connection.query(`
-      INSERT INTO clone_contact_kyc
-      SELECT * FROM contact_kyc WHERE userId = ?
-    `, [userId]);
-
-    await connection.query(`
-      INSERT INTO clone_employment_kyc
-      SELECT * FROM employment_kyc WHERE userId = ?
-    `, [userId]);
-
-    await connection.query(`
-      INSERT INTO clone_reference_kyc
-      SELECT * FROM reference_kyc WHERE userId = ?
-    `, [userId]);
 
     await connection.commit();
 
@@ -1416,122 +1405,6 @@ app.get("/api/kyc/checks-national-id", (req, res) => {
 
 
 
-
-app.post("/api/applications/submit-all", (req, res) => {
-  const data = req.body;
-  //const bc = data.borrowerCredit || {};
-
-  const sql = `
-    INSERT INTO borrower_credit_assessment (
-      loan_id, customer_id, applicant_name, contact_number, credit_officer,
-      loan_type, loan_amount, application_date,
-
-      lending_type, collateral_type, collateral_details,
-
-      is_creditworthy, business_overview, business_location,
-      business_start_date, nearest_landmark, business_description,
-
-      is_able_to_pay,
-
-      current_stock_value, started_business_with, source_of_fund,
-
-      principal, rate, loan_term,
-      interest, monthly_installment,
-
-      gross_margin_percentage, monthly_sales_revenue,
-      cost_of_goods_sold, gross_profit,
-
-      total_operating_expenses, net_business_profit,
-
-      household_expenses, other_income, household_surplus,
-
-      loan_recommendation,
-      expected_monthly_installment,
-      allowable_disposable_loan_service,
-
-      internal_comment, external_comment, decision
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
-  `;
-
-  const values = [
-    data.loanId,
-    data.customerId,
-    data.applicantName,
-    data.contactNumber,
-    data.creditOfficer,
-    data.loanType,
-    data.loanAmount ? Number(data.loanAmount) : null,
-    data.applicationDate,
-
-    data.lendingType || null,
-    data.collateralType || null,
-    JSON.stringify(data.details || {}),
-
-    data.isCreditworthy || false,
-    data.businessOverview || null,
-    data.businessLocation || null,
-    data.businessStartDate || null,
-    data.nearestLandmark || null,
-    data.businessDescription || null,
-
-    data.isAbleToPay || false,
-
-    data.currentStockValue || 0,
-    data.startedBusinessWith || 0,
-    data.sourceOfFund || null,
-
-    data.principal || 0,
-    data.rate || 0,
-    data.loanTerm || 0,
-    data.interest || 0,
-    data.monthlyInstallment || 0,
-
-    data.grossMarginPercentage || 0,
-    data.monthlySalesRevenue || 0,
-    data.costOfGoodsSold || 0,
-    data.grossProfit || 0,
-
-    data.totalOperatingExpenses || 0,
-    data.netBusinessProfit || 0,
-
-    data.householdExpenses || 0,
-    data.otherIncome || 0,
-    data.householdSurplus || 0,
-
-    data.loanRecommendation || 0,
-    data.expectedMonthlyInstallment || 0,
-    data.allowableDisposableLoanService || 0,
-
-    data.internalComment || null,
-    data.externalComment || null,
-    data.decision || "pending",
-  ];
-
-  db.query(sql, values, (err, result) => {
-    if (err) {
-      console.error("Database insert error:", err);
-      return res.status(500).json({
-        success: false,
-        message: "Database error",
-        error: err
-      });
-    }
-
-    res.json({
-      success: true,
-      message: "Application submitted successfully",
-      id: result.insertId
-    });
-  });
-});
-
-
-
-
-
-
-
 // Change from kycCode to userId
 
 
@@ -1582,8 +1455,6 @@ app.get("/api/kyc-view/:userId", (req, res) => {
 });
 
 
-
-
 app.post(
   "/api/loan/submit-full-application",
   upload.fields([
@@ -1593,148 +1464,164 @@ app.post(
     { name: "guarantorGhanaCardFront" },
     { name: "guarantorGhanaCardBack" },
   ]),
-  (req, res) => {
+  async (req, res) => {
 
-    console.log("📦 BODY:", req.body);
-    console.log("📁 FILES:", req.files);
+    db.getConnection(async (err, connection) => {
+      if (err) return res.status(500).json(err);
 
-    db.getConnection((err, connection) => {
-      if (err) {
-        console.error("❌ Connection Error:", err);
-        return res.status(500).json({ success: false, error: err.message });
-      }
-
-      connection.beginTransaction((err) => {
-        if (err) {
-          connection.release();
-          console.error("❌ Transaction Error:", err);
-          return res.status(500).json({ success: false, error: err.message });
-        }
+      try {
+        await connection.promise().beginTransaction();
 
         const {
-          userId, fullName, phone, email, kycCode, dateofbirth, gender, nationalid,
-          maritalstatus, dependents, residentialAddress, residentialGPS,
-          employmentStatus, loanAmount, loanPurpose, loanTerm,
-          repaymentFrequency, ratePerAnnum, interest, totalInterest,
-          numberOfPayments, monthlyPayment, loanFees, guarantorName,
-          guarantorPhone, guarantorAddress, guarantorResidenceLocation,
-          guarantorIdNumber, guarantorEmployeeType, guarantorRank,
-          guarantorWorkLocation, guarantorNameOfEmployer, guarantorYearsInService,
-          guarantorBusinessName, guarantorBusinessLocation, guarantorYearsInBusiness,
+          userId, fullName, phone, email, kycCode,
+          dateofbirth, gender, nationalid,
+          maritalstatus, dependents,
+          residentialAddress, residentialGPS,
+          employmentStatus,
+          loanAmount, loanPurpose, loanTerm,
+          repaymentFrequency, ratePerAnnum,
+          interest, totalInterest,
+          numberOfPayments, monthlyPayment,
+          loanFees,
+          guarantorName, guarantorPhone,
+          guarantorAddress, guarantorResidenceLocation,
+          guarantorIdNumber, guarantorEmployeeType,
+          guarantorRank, guarantorWorkLocation,
+          guarantorNameOfEmployer, guarantorYearsInService,
+          guarantorBusinessName, guarantorBusinessLocation,
+          guarantorYearsInBusiness,
           momoProvider, momoNumber, momoAccountName
         } = req.body;
 
-        // ================= APPLICANT ================
+        // ✅ STEP 1: Generate sequential loan_id safely
+        const year = new Date().getFullYear();
+
+        const [rows] = await connection.promise().query(`
+          SELECT loan_id 
+          FROM loan_details 
+          WHERE loan_id LIKE 'LN${year}%'
+          ORDER BY loan_id DESC 
+          LIMIT 1
+        `);
+
+        let nextNumber = 1;
+
+        if (rows.length > 0) {
+          const lastId = rows[0].loan_id; // LN202600023
+          const lastNumber = parseInt(lastId.slice(-5));
+          nextNumber = lastNumber + 1;
+        }
+
+        const padded = String(nextNumber).padStart(5, "0");
+        const loan_id = `LN${year}${padded}`;
+
+        // ================= APPLICANT =================
         const applicantData = {
-          userId, fullName, phone, email, kyc_code: kycCode,  dob: dateofbirth,   // ✅ FIXED,
-          gender, nationalid, maritalstatus,
+          userId,
+          loan_id,
+          fullName,
+          phone,
+          email,
+          kyc_code: kycCode,
+          dob: dateofbirth,
+          gender,
+          nationalid,
+          maritalStatus: maritalstatus,
           dependents: dependents ? parseInt(dependents) : null,
-          residentialAddress, residentialGPS, employmentStatus
+          residentialAddress,
+          residentialGPS,
+          employmentStatus
         };
 
-        connection.query(
+        await connection.promise().query(
           "INSERT INTO applicant_details SET ?",
-          applicantData,
-          (err) => {
-            if (err) {
-              console.error("❌ Applicant Error:", err);
-              return connection.rollback(() => {
-                connection.release();
-                res.status(500).json({ success: false, error: err.message });
-              });
-            }
-
-            // ================= LOAN =================
-            const loanData = {
-              userId, kyc_code: kycCode,
-              loanAmount: loanAmount ? parseFloat(loanAmount) : null,
-              loanPurpose,
-              loanTerm: loanTerm ? parseInt(loanTerm) : null,
-              repaymentFrequency,
-              ratePerAnnum: ratePerAnnum ? parseFloat(ratePerAnnum) : null,
-              interest: interest ? parseFloat(interest) : null,
-              totalInterest: totalInterest ? parseFloat(totalInterest) : null,
-              numberOfPayments: numberOfPayments ? parseInt(numberOfPayments) : null,
-              monthlyPayment: monthlyPayment ? parseFloat(monthlyPayment) : null,
-              loanFees: loanFees ? parseFloat(loanFees) : null,
-            };
-
-            connection.query("INSERT INTO loan_details SET ?", loanData, (err) => {
-              if (err) {
-                console.error("❌ Loan Error:", err);
-                return connection.rollback(() => {
-                  connection.release();
-                  res.status(500).json({ success: false, error: err.message });
-                });
-              }
-
-              // ================= GUARANTOR =================
-              const guarantorData = {
-                userId,
-                kyc_code: kycCode,
-                guarantorName,
-                guarantorPhone,
-                guarantorAddress,
-                guarantorResidenceLocation,
-                guarantorIdNumber,
-                guarantorEmployeeType,
-                guarantorRank,
-                guarantorWorkLocation,
-                guarantorNameOfEmployer,
-                guarantorYearsInService: guarantorYearsInService ? parseInt(guarantorYearsInService) : null,
-                guarantorBusinessName,
-                guarantorBusinessLocation,
-                guarantorYearsInBusiness: guarantorYearsInBusiness ? parseInt(guarantorYearsInBusiness) : null,
-                guarantorProfilePicture: req.files?.guarantorProfilePicture?.[0]?.path || null,
-                guarantorPayslip: req.files?.guarantorPayslip?.[0]?.path || null,
-                guarantorBusinessPicture: req.files?.guarantorBusinessPicture?.[0]?.path || null,
-                guarantorGhanaCardFront: req.files?.guarantorGhanaCardFront?.[0]?.path || null,
-                guarantorGhanaCardBack: req.files?.guarantorGhanaCardBack?.[0]?.path || null,
-              };
-
-              connection.query("INSERT INTO guarantor_info SET ?", guarantorData, (err) => {
-                if (err) {
-                  console.error("❌ Guarantor Error:", err);
-                  return connection.rollback(() => {
-                    connection.release();
-                    res.status(500).json({ success: false, error: err.message });
-                  });
-                }
-
-                // ================= MOMO ===========
-                const momoData = {
-                  userId,
-                  kyc_code: kycCode,
-                  momoProvider,
-                  momoNumber,
-                  momoAccountName
-                };
-
-                connection.query("INSERT INTO momo_details SET ?", momoData, (err) => {
-                  if (err) {
-                    console.error("❌ Momo Error:", err);
-                    return connection.rollback(() => {
-                      connection.release();
-                      res.status(500).json({ success: false, error: err.message });
-                    });
-                  }
-
-                  connection.commit((err) => {
-                    connection.release();
-
-                    if (err) {
-                      console.error("❌ Commit Error:", err);
-                      return res.status(500).json({ success: false, error: err.message });
-                    }
-
-                    res.json({ success: true });
-                  });
-                });
-              });
-            });
-          }
+          applicantData
         );
-      });
+
+        // ================= LOAN =================
+        const loanData = {
+          userId,
+          loan_id,
+          kyc_code: kycCode,
+          loanAmount: loanAmount ? parseFloat(loanAmount) : null,
+          loanPurpose,
+          loanTerm: loanTerm ? parseInt(loanTerm) : null,
+          repaymentFrequency,
+          ratePerAnnum: ratePerAnnum ? parseFloat(ratePerAnnum) : null,
+          interest: interest ? parseFloat(interest) : null,
+          totalInterest: totalInterest ? parseFloat(totalInterest) : null,
+          numberOfPayments: numberOfPayments ? parseInt(numberOfPayments) : null,
+          monthlyPayment: monthlyPayment ? parseFloat(monthlyPayment) : null,
+          loanFees: loanFees ? parseFloat(loanFees) : null,
+        };
+
+        await connection.promise().query(
+          "INSERT INTO loan_details SET ?",
+          loanData
+        );
+
+        // ================= GUARANTOR =================
+        const guarantorData = {
+          userId,
+          loan_id,
+          kyc_code: kycCode,
+          guarantorName,
+          guarantorPhone,
+          guarantorAddress,
+          guarantorResidenceLocation,
+          guarantorIdNumber,
+          guarantorEmployeeType,
+          guarantorRank,
+          guarantorWorkLocation,
+          guarantorNameOfEmployer,
+          guarantorYearsInService: guarantorYearsInService ? parseInt(guarantorYearsInService) : null,
+          guarantorBusinessName,
+          guarantorBusinessLocation,
+          guarantorYearsInBusiness: guarantorYearsInBusiness ? parseInt(guarantorYearsInBusiness) : null,
+          guarantorProfilePicture: req.files?.guarantorProfilePicture?.[0]?.path || null,
+          guarantorPayslip: req.files?.guarantorPayslip?.[0]?.path || null,
+          guarantorBusinessPicture: req.files?.guarantorBusinessPicture?.[0]?.path || null,
+          guarantorGhanaCardFront: req.files?.guarantorGhanaCardFront?.[0]?.path || null,
+          guarantorGhanaCardBack: req.files?.guarantorGhanaCardBack?.[0]?.path || null,
+        };
+
+        await connection.promise().query(
+          "INSERT INTO guarantor_info SET ?",
+          guarantorData
+        );
+
+        // ================= MOMO =================
+        const momoData = {
+          userId,
+          loan_id,
+          kyc_code: kycCode,
+          momoProvider,
+          momoNumber,
+          momoAccountName,
+          loan_status: "pending"
+        };
+
+        await connection.promise().query(
+          "INSERT INTO momo_details SET ?",
+          momoData
+        );
+
+        // ✅ COMMIT
+        await connection.promise().commit();
+        connection.release();
+
+        res.json({
+          success: true,
+          loan_id
+        });
+
+      } catch (error) {
+        await connection.promise().rollback();
+        connection.release();
+
+        console.error("❌ Transaction failed:", error);
+        res.status(500).json(error);
+      }
     });
   }
 );
@@ -1773,7 +1660,7 @@ app.get("/api/loan-status/:userId", (req, res) => {
 
 // backend/routes/admin.js
 app.get("/api/admin/full-loan-kyc", (req, res) => {
-  const sql = "SELECT * FROM full_loan_kyc_view ORDER BY applicant_created_at DESC";
+  const sql = "SELECT * FROM full_loan_kyc_view2 ORDER BY applicant_created_at DESC";
   db.query(sql, (err, results) => {
     if (err) return res.status(500).json({ success: false, error: err });
     res.json(results);
@@ -1785,7 +1672,7 @@ app.get("/api/admin/full-loan-kyc", (req, res) => {
 app.get("/api/admin/loan/:userId", (req, res) => {
   const userId = req.params.userId;
 
-  const sql = "SELECT * FROM full_loan_kyc_view WHERE userId = ?";
+  const sql = "SELECT * FROM full_loan_kyc_view2 WHERE userId = ?";
 
   db.query(sql, [userId], (err, results) => {
     if (err) {
@@ -1862,7 +1749,7 @@ app.get("/loan-check/:userId", (req, res) => {
   const { userId } = req.params;
 
   db.query(
-    "SELECT 1 FROM full_loan_view WHERE userId = ? LIMIT 1",
+    "SELECT 1 FROM full_loan_kyc_view WHERE userId = ? LIMIT 1",
     [userId],
     (err, rows) => {
       if (err) {
@@ -1910,7 +1797,7 @@ app.get("/loan-check/:userId", (req, res) => {
 
 
 
-app.post("/loan/approve", (req, res) => {
+/*app.post("/loan/approve", (req, res) => {
   const { kyc_code } = req.body;
 
   db.query(
@@ -1923,7 +1810,24 @@ app.post("/loan/approve", (req, res) => {
       res.json({ message: "Approved" });
     }
   );
-});
+});*/
+
+
+/*app.post("/loan/approve", (req, res) => {
+  const { loan_id } = req.body;
+
+  db.query(
+    `UPDATE momo_details 
+     SET loan_status = 'approved'
+     WHERE loan_id = ?`,
+    [loan_id],
+    (err) => {
+      if (err) return res.status(500).json(err);
+
+      res.json({ message: "Loan approved successfully" });
+    }
+  );
+});*/
 
 
 
@@ -1931,12 +1835,26 @@ app.post("/loan/approve", (req, res) => {
 
 
 
-app.get("/api/admin/approved-loans", (req, res) => {
+/*app.get("/api/admin/approved-loans", (req, res) => {
   db.query(
     `SELECT * FROM full_loan_kyc_view WHERE loan_status = 'approved'`,
     (err, result) => {
       if (err) return res.status(500).json(err);
       res.json(result);
+    }
+  );
+});*/
+
+
+app.get("/api/admin/approved-loans", (req, res) => {
+  db.query(
+    `SELECT * FROM full_loan_kyc_view2
+     WHERE loan_status = 'approved'
+     ORDER BY applicant_created_at DESC`,
+    (err, results) => {
+      if (err) return res.status(500).json(err);
+
+      res.json(results);
     }
   );
 });
@@ -1963,6 +1881,711 @@ app.get("/api/admin/loan1/:userId", (req, res) => {
     }
   );
 });
+
+
+
+
+
+
+
+
+app.get("/api/customer/:kyc_code", (req, res) => {
+  const { kyc_code } = req.params;
+
+  db.execute(
+    `
+    SELECT *
+    FROM full_loan_kyc_view1
+    WHERE kyc_code = ? AND loan_status = 'approved'
+    LIMIT 1
+    `,
+    [kyc_code],
+    (err, rows) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({
+          success: false,
+          message: "Server error",
+        });
+      }
+
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "KYC not approved or not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        customer: rows[0],
+      });
+    }
+  );
+});
+
+
+   
+app.post("/api/accounts/create", upload.single("image"), (req, res) => {
+  const {
+    kyc_code,
+    firstName,
+    lastName,
+    otherName,
+    dob,
+    gender,
+    branch,
+    productType,
+    accountName,
+    accountDescription,
+    accountMandate,
+  } = req.body;
+
+  const image = req.file ? req.file.filename : null;
+
+  const sql = `
+    INSERT INTO accounts 
+    (kyc_code, firstName, lastName, otherName, dob, gender, branch,
+     productType, accountName, accountDescription, accountMandate, image)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  const values = [
+    kyc_code,
+    firstName,
+    lastName,
+    otherName,
+    dob,
+    gender,
+    branch,
+    productType,
+    accountName,
+    accountDescription,
+    accountMandate,
+    image,
+  ];
+
+  db.query(sql, values, (err, result) => {
+    if (err) {
+      return res.json({ success: false, message: err.message });
+    }
+
+    return res.json({
+      success: true,
+      message: "Account created",
+      accountId: result.insertId,
+    });
+  });
+});
+
+
+
+
+
+
+
+
+
+/* app.post("/loan/reject", (req, res) => {
+  const { loan_id } = req.body;
+
+  if (!loan_id) {
+    return res.status(400).json({ error: "loan_id is required" });
+  }
+
+  const sql = `
+    UPDATE momo_details 
+    SET loan_status = 'rejected' 
+    WHERE loan_id = ?
+  `;
+
+  db.query(sql, [loan_id], (err, result) => {
+    if (err) {
+      console.error("Error rejecting loan:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Loan not found" });
+    }
+
+    res.json({
+      message: "Loan rejected successfully",
+      loan_id,
+    });
+  });
+});*/
+
+app.post("/loan/reject", (req, res) => {
+  const { loan_id } = req.body;
+
+  if (!loan_id) {
+    return res.status(400).json({ error: "loan_id is required" });
+  }
+
+  const sql = `
+    UPDATE momo_details 
+    SET loan_status = 'rejected',
+        is_deleted = 1
+    WHERE loan_id = ?
+  `;
+
+  db.query(sql, [loan_id], (err, result) => {
+    if (err) {
+      console.error("Error rejecting loan:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Loan not found" });
+    }
+
+    res.json({
+      message: "Loan rejected and soft deleted successfully",
+      loan_id,
+    });
+  });
+});
+
+
+// =========================
+// SAFE HELPER (FIX FOR UNDEFINED ERROR)
+// =========================
+/* const safe = (value) => (value === undefined ? null : value);
+
+// =========================
+// LOAN EVALUATION API
+// =========================
+app.post("/api/loan/evaluate", async (req, res) => {
+  const connection = await dbPromise.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const { loan, collateral, creditData, finalDecision } = req.body;
+
+    const loanId = loan.loan_id || loan.id;
+
+    // 🚨 Ensure kyc_code exists
+    if (!loan?.kyc_code) {
+      throw new Error("kyc_code is required to update momo_details");
+    }
+
+    // =========================
+    // 1. LOANS_EVAL TABLE
+    // =========================
+    await connection.execute(
+      `INSERT INTO loans_eval (
+        loan_id,
+        kyc_code,
+        applicant_fullName,
+        mobileNumber,
+        loanAmount,
+        loan_status,
+        loanPurpose,
+        applicant_created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(loan.kyc_code),
+        safe(loan.applicant_fullName),
+        safe(loan.mobileNumber),
+        safe(loan.loanAmount),
+        safe(loan.loan_status),
+        safe(loan.loanPurpose),
+        safe(loan.applicant_created_at),
+      ]
+    );
+
+    // =========================
+    // 2. COLLATERAL TABLE
+    // =========================
+    await connection.execute(
+      `INSERT INTO loan_collaterals (
+        loan_id,
+        lending_type,
+        collateral_type,
+        collateral_data
+      ) VALUES (?, ?, ?, ?)`,
+      [
+        safe(loanId),
+
+        // enforce enum values
+        collateral?.lendingType === "secured" || collateral?.lendingType === "unsecured"
+          ? collateral.lendingType
+          : null,
+
+        safe(collateral?.collateralType),
+
+        JSON.stringify(collateral?.formData || {}),
+      ]
+    );
+
+    // =========================
+    // 3. CREDIT ASSESSMENT
+    // =========================
+    await connection.execute(
+      `INSERT INTO borrower_credit_assessments (
+        loan_id,
+        is_creditworthy,
+        is_able_to_pay,
+        business_overview,
+        business_location,
+        business_start_date,
+        nearest_landmark,
+        business_description,
+        current_stock_value,
+        started_business_with,
+        source_of_fund,
+        principal,
+        rate,
+        loan_term,
+        interest,
+        loan_amount,
+        monthly_installment,
+        gross_margin_percentage,
+        monthly_sales_revenue,
+        cost_of_goods_sold,
+        gross_profit,
+        total_operating_expenses,
+        net_business_profit,
+        household_expenses,
+        other_income,
+        household_surplus,
+        loan_recommendation,
+        pay_capacity,
+        extra_data
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        creditData.isCreditworthy ? 1 : 0,
+        creditData.isAbleToPay ? 1 : 0,
+        safe(creditData.businessOverview),
+        safe(creditData.businessLocation),
+        safe(creditData.businessStartDate),
+        safe(creditData.nearestLandmark),
+        safe(creditData.businessDescription),
+        safe(creditData.currentStockValue),
+        safe(creditData.startedBusinessWith),
+        safe(creditData.sourceOfFund),
+        safe(creditData.principal),
+        safe(creditData.rate),
+        safe(creditData.loanTerm),
+        safe(creditData.interest),
+        safe(creditData.loanAmount),
+        safe(creditData.monthlyInstallment),
+        safe(creditData.grossMarginPercentage),
+        safe(creditData.monthlySalesRevenue),
+        safe(creditData.costOfGoodsSold),
+        safe(creditData.grossProfit),
+        safe(creditData.totalOperatingExpenses),
+        safe(creditData.netBusinessProfit),
+        safe(creditData.householdExpenses),
+        safe(creditData.otherIncome),
+        safe(creditData.householdSurplus),
+        safe(creditData.loanRecommendation),
+        safe(creditData.payCapacity),
+        JSON.stringify(creditData.extraData || {}),
+      ]
+    );
+
+    // =========================
+    // 4. FINAL DECISION
+    // =========================
+    await connection.execute(
+      `INSERT INTO loan_final_decisions (
+        loan_id,
+        comments,
+        is_confirmed
+      ) VALUES (?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(finalDecision.comments),
+        finalDecision.confirmed ? 1 : 0,
+      ]
+    );
+
+    // =========================
+    // 5. SOFT DELETE MOMO DETAILS ✅
+    // =========================
+    const [momoResult] = await connection.execute(
+      `UPDATE momo_details 
+       SET is_deleted = 1 
+       WHERE kyc_code = ?`,
+      [safe(loan.kyc_code)]
+    );
+
+    if (momoResult.affectedRows === 0) {
+      console.warn("⚠️ No momo_details record found for this kyc_code");
+    }
+
+    // =========================
+    // COMMIT TRANSACTION
+    // =========================
+    await connection.commit();
+
+    res.json({
+      message: "Loan evaluation saved & momo details updated successfully",
+      loan_id: loanId,
+    });
+
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("❌ Evaluation Error:", error);
+
+    res.status(500).json({
+      message: "Error saving loan evaluation",
+      error: error.message,
+    });
+
+  } finally {
+    connection.release();
+  }
+});*/
+
+
+// =========================
+// HELPER FUNCTIONS
+// =========================
+const formatMySQLDate = (date) => {
+  if (!date) return null;
+
+  const d = new Date(date);
+  if (isNaN(d)) return null;
+
+  const pad = (n) => n.toString().padStart(2, '0');
+
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+         `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
+
+// Optional safe helper (if not already defined)
+const safe = (val) => (val === undefined ? null : val);
+
+// =========================
+// LOAN EVALUATION API
+// =========================
+app.post("/api/loan/evaluate", async (req, res) => {
+  const connection = await dbPromise.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const { loan, collateral, creditData, finalDecision } = req.body;
+
+    const loanId = loan.loan_id || loan.id;
+
+    // 🚨 Ensure kyc_code exists
+    if (!loan?.kyc_code) {
+      throw new Error("kyc_code is required to update momo_details");
+    }
+
+    // =========================
+    // 1. LOANS_EVAL TABLE
+    // =========================
+    await connection.execute(
+      `INSERT INTO loans_eval (
+        loan_id,
+        kyc_code,
+        applicant_fullName,
+        mobileNumber,
+        loanAmount,
+        loan_status,
+        loanPurpose,
+        applicant_created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(loan.kyc_code),
+        safe(loan.applicant_fullName),
+        safe(loan.mobileNumber),
+        safe(loan.loanAmount),
+        safe(loan.loan_status),
+        safe(loan.loanPurpose),
+
+        // ✅ FIXED DATE FORMAT HERE
+        formatMySQLDate(loan.applicant_created_at),
+      ]
+    );
+
+    // =========================
+    // 2. COLLATERAL TABLE
+    // =========================
+    await connection.execute(
+      `INSERT INTO loan_collaterals (
+        loan_id,
+        lending_type,
+        collateral_type,
+        collateral_data
+      ) VALUES (?, ?, ?, ?)`,
+      [
+        safe(loanId),
+
+        collateral?.lendingType === "secured" || collateral?.lendingType === "unsecured"
+          ? collateral.lendingType
+          : null,
+
+        safe(collateral?.collateralType),
+        JSON.stringify(collateral?.formData || {}),
+      ]
+    );
+
+    // =========================
+    // 3. CREDIT ASSESSMENT
+    // =========================
+    await connection.execute(
+      `INSERT INTO borrower_credit_assessments (
+        loan_id,
+        is_creditworthy,
+        is_able_to_pay,
+        business_overview,
+        business_location,
+        business_start_date,
+        nearest_landmark,
+        business_description,
+        current_stock_value,
+        started_business_with,
+        source_of_fund,
+        principal,
+        rate,
+        loan_term,
+        interest,
+        loan_amount,
+        monthly_installment,
+        gross_margin_percentage,
+        monthly_sales_revenue,
+        cost_of_goods_sold,
+        gross_profit,
+        total_operating_expenses,
+        net_business_profit,
+        household_expenses,
+        other_income,
+        household_surplus,
+        loan_recommendation,
+        pay_capacity,
+        extra_data
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        creditData.isCreditworthy ? 1 : 0,
+        creditData.isAbleToPay ? 1 : 0,
+        safe(creditData.businessOverview),
+        safe(creditData.businessLocation),
+
+        // ✅ ALSO FIX THIS DATE (important!)
+        formatMySQLDate(creditData.businessStartDate),
+
+        safe(creditData.nearestLandmark),
+        safe(creditData.businessDescription),
+        safe(creditData.currentStockValue),
+        safe(creditData.startedBusinessWith),
+        safe(creditData.sourceOfFund),
+        safe(creditData.principal),
+        safe(creditData.rate),
+        safe(creditData.loanTerm),
+        safe(creditData.interest),
+        safe(creditData.loanAmount),
+        safe(creditData.monthlyInstallment),
+        safe(creditData.grossMarginPercentage),
+        safe(creditData.monthlySalesRevenue),
+        safe(creditData.costOfGoodsSold),
+        safe(creditData.grossProfit),
+        safe(creditData.totalOperatingExpenses),
+        safe(creditData.netBusinessProfit),
+        safe(creditData.householdExpenses),
+        safe(creditData.otherIncome),
+        safe(creditData.householdSurplus),
+        safe(creditData.loanRecommendation),
+        safe(creditData.payCapacity),
+        JSON.stringify(creditData.extraData || {}),
+      ]
+    );
+
+    // =========================
+    // 4. FINAL DECISION
+    // =========================
+    await connection.execute(
+      `INSERT INTO loan_final_decisions (
+        loan_id,
+        comments,
+        is_confirmed
+      ) VALUES (?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(finalDecision.comments),
+        finalDecision.confirmed ? 1 : 0,
+      ]
+    );
+
+    // =========================
+    // 5. SOFT DELETE MOMO DETAILS
+    // =========================
+    const [momoResult] = await connection.execute(
+      `UPDATE momo_details 
+       SET is_deleted = 1 
+       WHERE kyc_code = ?`,
+      [safe(loan.kyc_code)]
+    );
+
+    if (momoResult.affectedRows === 0) {
+      console.warn("⚠️ No momo_details record found for this kyc_code");
+    }
+
+    // =========================
+    // COMMIT
+    // =========================
+    await connection.commit();
+
+    res.json({
+      message: "Loan evaluation saved & momo details updated successfully",
+      loan_id: loanId,
+    });
+
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("❌ Evaluation Error:", error);
+
+    res.status(500).json({
+      message: "Error saving loan evaluation",
+      error: error.message,
+    });
+
+  } finally {
+    connection.release();
+  }
+});
+
+
+app.get("/api/admin/loan-full-view-evaluation", (req, res) => {
+  const query = `
+    SELECT * 
+    FROM loan_master4
+    WHERE loan_eval_id IS NOT NULL 
+    AND loan_eval_id != ''
+  `;
+
+  db.query(query, (err, rows) => {
+    if (err) {
+      console.error("DB Error:", err);
+      return res.status(500).json({
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    res.json(rows);
+  });
+});
+
+
+
+
+app.get("/api/admin/loan1/:loan_id", (req, res) => {
+  const { loan_id } = req.params;
+
+  db.query(
+    "SELECT * FROM loan_master1 WHERE loan_id = ?",
+    [loan_id],
+    (err, rows) => {
+      if (err) {
+        console.error("DB Error:", err);
+        return res.status(500).json({
+          message: "Database error",
+          error: err.message,
+        });
+      }
+
+      if (rows.length === 0) {
+        return res.status(404).json({
+          message: "Loan not found",
+        });
+      }
+
+      res.json(rows[0]); // return single loan
+    }
+  );
+});
+
+
+
+
+app.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
+  const { loan_id } = req.params;
+
+  try {
+    const query = `
+      UPDATE momo_details
+      SET 
+        loan_status = 'approved',
+        approved_date = NOW()
+      WHERE loan_id = ? 
+     
+    `;
+
+    db.query(query, [loan_id], (err, result) => {
+      if (err) {
+        console.error("Database Error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Database error",
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Loan not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Loan approved successfully",
+      });
+    });
+  } catch (error) {
+    console.error("Server Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});
+
+
+
+
+
+
+app.get("/api/admin/approved-loan", (req, res) => {
+  const query = `
+    SELECT 
+      applicant_fullName,
+      mobileNumber,
+      applicant_phone,
+      kyc_loan_amount,
+      approved_date
+    FROM loan_master4
+    WHERE loan_status = 'approved'
+    ORDER BY approved_date DESC
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("Database Error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error"
+      });
+    }
+
+    return res.status(200).json(results);
+  });
+});
+
+
 
 
 
