@@ -818,7 +818,7 @@ app.put('/users/:id', (req, res) => {
 
 
 // ✅ CREATE UPLOADS FOLDER IF NOT EXISTS
-// =============================
+// ===========================
 const uploadDir = path.join(__dirname, "uploads");
 
 if (!fs.existsSync(uploadDir)) {
