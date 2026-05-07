@@ -77,7 +77,8 @@ app.use(cors({
 const allowedOrigins = [
   "http://localhost:3000",
   "https://yonkopa-frontend.vercel.app",
-  "https://yonkopa-frontend-app.vercel.app"
+  "https://yonkopa-frontend-app.vercel.app",
+   "https://yonkopamicrocredit.com"
 ];
 
 app.use(cors({
