@@ -125,6 +125,33 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
+/*const db = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT,
+
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
+
+
+
+
+db.getConnection((err, connection) => {
+  if (err) {
+    console.error("❌ Database connection failed:", err);
+  } else {
+    console.log("✅ Connected to MySQL database");
+    connection.release();
+  }
+});
+*/
+
+
+//import mysql from "mysql2";
 
 const dbConfig = process.env.NODE_ENV === "development" 
   ? {
@@ -262,13 +289,180 @@ app.post('/signup', async (req, res) => {
 
 
 
+app.post('/signup2', async (req, res) => {
+  const { fullName, full_name, identifier, password, confirmPassword, role } = req.body;
+
+  const name = fullName || full_name;
+
+  console.log('Received data:', { name, identifier, role });
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ message: "Full name is required" });
+  }
+
+  if (!identifier || !identifier.trim()) {
+    return res.status(400).json({ message: "Email or phone number is required" });
+  }
+
+  if (!password) {
+    return res.status(400).json({ message: "Password is required" });
+  }
+
+  if (password !== confirmPassword) {
+    return res.status(400).json({ message: "Passwords do not match" });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters" });
+  }
+
+  const passwordRegex = /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
+  if (!passwordRegex.test(password)) {
+    return res.status(400).json({
+      message: "Password must contain uppercase, lowercase, and a number"
+    });
+  }
+
+  try {
+    let email = null;
+    let phone = null;
+
+    const cleanIdentifier = identifier.trim();
+
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanIdentifier);
+    const phoneDigits = cleanIdentifier.replace(/\D/g, '');
+    const isPhone = /^\d{10,12}$/.test(phoneDigits);
+
+    if (isEmail) {
+      email = cleanIdentifier.toLowerCase();
+    } else if (isPhone) {
+      phone = phoneDigits;
+    } else {
+      return res.status(400).json({
+        message: "Enter valid email or phone number"
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const userRole = role || "customer";
+
+    const insertSql = `
+      INSERT INTO users (full_name, email, phone, password, role, created_at)
+      VALUES (?, ?, ?, ?, ?, NOW())
+    `;
+
+    db.query(
+      insertSql,
+      [name.trim(), email, phone, hashedPassword, userRole],
+      (err, result) => {
+        if (err) {
+          console.error("Insert error:", err);
+          return res.status(500).json({ message: "Error creating account" });
+        }
+
+        res.status(201).json({
+          message: "Account created successfully",
+          userId: result.insertId
+        });
+      }
+    );
+
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+
+
+
+// Signup admin endpoint
+app.post('/signup1', async (req, res) => {
+  const { full_name, email, phone, password, role } = req.body;
+
+  if (!full_name || !email || !phone || !password || !role) {
+    return res.status(400).json({ message: 'All fields are required' });
+  }
+
+  try {
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert into MySQL
+    const query = `INSERT INTO users (full_name, email, phone, password, role, created_at) VALUES (?, ?, ?, ?, ?, NOW())`;
+    db.query(query, [full_name, email, phone, hashedPassword, role], (err, result) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ message: 'Database error' });
+      }
+      res.status(200).json({ message: 'User registered successfully!' });
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 
 
 
 
 
-//customer login
+
+// --- LOGIN ENDPOINT ---
+// --- LOGIN ENDPOINT ---
+/*app.post('/login', (req, res) => {
+  const { identifier, password } = req.body; // identifier can be email or phone
+
+  // SQL: check if either email or phone matches
+  const sql = 'SELECT * FROM users WHERE email = ? OR phone = ?';
+  db.query(sql, [identifier, identifier], async (err, results) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ message: 'Server error' });
+    }
+
+    if (results.length === 0)
+      return res.status(404).json({ message: 'User not found' });
+
+    const user = results[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch)
+      return res.status(401).json({ message: 'Invalid credentials' });
+
+
+    // Update status to 'online'
+   // db.query("UPDATE users SET status='online', last_login=NOW() WHERE userId=?", [user.userId], (err2) => {
+      //if (err2) console.error("Error updating status:", err2);
+    //});
+
+    // Create JWT token with role info
+    const token = jwt.sign(
+      { userId: user.userId, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '2h' }
+    );
+
+    res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        userId: user.userId,
+        fullName: user.full_name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role
+      }
+    });
+  });
+}); */
+
+// --- LOGIN ENDPOINT ---
+
+
+
 app.post('/login', async (req, res) => {
   try {
     let { identifier, password } = req.body;
@@ -339,201 +533,6 @@ app.post('/login', async (req, res) => {
 
 
 
-
-
-// stafff signup
-
-app.post('/signup2', async (req, res) => {
-  const { fullName, full_name, identifier, password, confirmPassword, role } = req.body;
-
-  const name = fullName || full_name;
-
-  console.log('Received data:', { name, identifier, role });
-
-  if (!name || !name.trim()) {
-    return res.status(400).json({ message: "Full name is required" });
-  }
-
-  if (!identifier || !identifier.trim()) {
-    return res.status(400).json({ message: "Email or phone number is required" });
-  }
-
-  if (!password) {
-    return res.status(400).json({ message: "Password is required" });
-  }
-
-  if (password !== confirmPassword) {
-    return res.status(400).json({ message: "Passwords do not match" });
-  }
-
-  if (password.length < 8) {
-    return res.status(400).json({ message: "Password must be at least 8 characters" });
-  }
-
-  const passwordRegex = /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
-  if (!passwordRegex.test(password)) {
-    return res.status(400).json({
-      message: "Password must contain uppercase, lowercase, and a number"
-    });
-  }
-
-  try {
-    let email = null;
-    let phone = null;
-
-    const cleanIdentifier = identifier.trim();
-
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanIdentifier);
-    const phoneDigits = cleanIdentifier.replace(/\D/g, '');
-    const isPhone = /^\d{10,12}$/.test(phoneDigits);
-
-    if (isEmail) {
-      email = cleanIdentifier.toLowerCase();
-    } else if (isPhone) {
-      phone = phoneDigits;
-    } else {
-      return res.status(400).json({
-        message: "Enter valid email or phone number"
-      });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const userRole = role || "customer";
-
-    const insertSql = `
-      INSERT INTO users1 (full_name, email, phone, password, role, created_at)
-      VALUES (?, ?, ?, ?, ?, NOW())
-    `;
-
-    db.query(
-      insertSql,
-      [name.trim(), email, phone, hashedPassword, userRole],
-      (err, result) => {
-        if (err) {
-          console.error("Insert error:", err);
-          return res.status(500).json({ message: "Error creating account" });
-        }
-
-        res.status(201).json({
-          message: "Account created successfully",
-          userId: result.insertId
-        });
-      }
-    );
-
-  } catch (err) {
-    console.error("Signup error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-
-
-
-
-// Signup admin endpoint
-app.post('/signup1', async (req, res) => {
-  const { full_name, email, phone, password, role } = req.body;
-
-  if (!full_name || !email || !phone || !password || !role) {
-    return res.status(400).json({ message: 'All fields are required' });
-  }
-
-  try {
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Insert into MySQL
-    const query = `INSERT INTO users (full_name, email, phone, password, role, created_at) VALUES (?, ?, ?, ?, ?, NOW())`;
-    db.query(query, [full_name, email, phone, hashedPassword, role], (err, result) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Database error' });
-      }
-      res.status(200).json({ message: 'User registered successfully!' });
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-
-
-
-// staff login
-
-app.post('/login2', async (req, res) => {
-  try {
-    let { identifier, password } = req.body;
-
-    if (!identifier || !password)
-      return res.status(400).json({ message: 'Identifier and password required' });
-
-    identifier = identifier.trim(); // remove spaces
-
-    // If it looks like an email, lowercase it
-    const isEmail = identifier.includes('@');
-    if (isEmail) identifier = identifier.toLowerCase();
-
-    // If it looks like a phone, normalize it
-    let phone = null;
-    if (!isEmail) {
-      phone = identifier.replace(/\D/g, ''); // remove non-digits
-      // Optional: convert +233 to 0
-      if (phone.startsWith('233') && phone.length === 12) phone = '0' + phone.slice(3);
-    }
-
-    // Query database
-    const sql = isEmail 
-      ? 'SELECT * FROM users1 WHERE LOWER(email) = ?'
-      : 'SELECT * FROM users1 WHERE phone = ?';
-
-    db.query(sql, [isEmail ? identifier : phone], async (err, results) => {
-      if (err) {
-        console.error('Database error:', err);
-        return res.status(500).json({ message: 'Server error' });
-      }
-
-      if (results.length === 0)
-        return res.status(404).json({ message: 'User not found' });
-
-      const user = results[0];
-      const isMatch = await bcrypt.compare(password, user.password);
-
-      if (!isMatch)
-        return res.status(401).json({ message: 'Invalid credentials' });
-
-      // JWT token
-      const token = jwt.sign(
-        { userId: user.userId, email: user.email, role: user.role },
-        JWT_SECRET,
-        { expiresIn: '2h' }
-      );
-
-      res.json({
-        message: 'Login successful',
-        token,
-        user: {
-          userId: user.userId,
-          fullName: user.full_name,
-          email: user.email,
-          phone: user.phone,
-          role: user.role
-        }
-      });
-    });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-
-
-
-
 // CHANGE PASSWORD API
 app.post("/api/change-password", (req, res) => {
 
@@ -595,6 +594,14 @@ app.post("/api/change-password", (req, res) => {
   });
 
 });
+
+
+
+
+
+
+
+
 
 
 
@@ -702,6 +709,43 @@ app.get("/api/admin/loan-progress", (req, res) => {
 
 
 
+
+
+/*app.post("/api/verify-customer",(req, res) => {
+  const { userId, kycCode } = req.body;
+    console.log("Incoming data:", req.body); // 👈 ADD THIS
+
+  //const query = `
+  //SELECT * 
+  // FROM personal_kyc
+   // WHERE userId = ? AND kycCode = ?;
+ // `;
+
+ const query = `
+  SELECT * 
+  FROM personal_kyc
+  WHERE userId = ? AND kycCode = ?
+`;
+
+
+  db.query(query, [userId, kycCode], (err, results) => {
+    if (err) {
+      console.error("Verify customer error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (results.length === 0) {
+      return res.json({ verified: false });
+    }
+
+    res.json({
+      verified: true,
+      customer: results[0], // full joined data
+    });
+  });
+});*/
+
+
 app.post("/api/verify-customer", (req, res) => {
   let { userId, kycCode } = req.body;
 
@@ -751,8 +795,8 @@ app.post("/api/verify-customer", (req, res) => {
 
 app.get('/getusers', (req, res) => {
   const sql = `
-    SELECT userId, full_name, email, phone, role, status,created_at
-    FROM users1
+    SELECT userId, full_name, email, phone, role, created_at
+    FROM users
     ORDER BY created_at DESC
   `;
 
@@ -768,7 +812,6 @@ app.get('/getusers', (req, res) => {
       email: user.email,
       phone: user.phone,
       role: user.role,
-      status: user.status,
       username: user.email || user.phone,
       created_at: user.created_at
     }));
@@ -800,7 +843,7 @@ app.put('/users/:id', (req, res) => {
   }
 
   const sql = `
-    UPDATE users1
+    UPDATE users
     SET full_name = ?, email = ?, phone = ?, role = ?
     WHERE userId = ?
   `;
@@ -853,7 +896,200 @@ app.delete('/users/:id', (req, res) => {
   });
 });
 // ==============================
+// ✅ MULTER CONFIG
+// ==============================
+/*
+app.post("/api/kyc/save-all", authenticateToken, upload.fields([
+  { name: "avatar", maxCount: 1 },
+  { name: "payslip", maxCount: 1 },
+  { name: "ghanaCardFront", maxCount: 1 },
+  { name: "ghanaCardBack", maxCount: 1 },
+  { name: "employmentId", maxCount: 1 },
+  { name: "businessPicture", maxCount: 1 },
+]), async (req, res) => {
+  const connection = await db.promise().getConnection();
+  try {
+    await connection.beginTransaction();
 
+   // const { userId } = req.body;
+   const userId = req.user.userId; // ✅ SECURE
+    const toNull = (v) => (v === "" ? null : v);
+
+    // ==================
+    // 1. Personal Info
+    // ==================
+    const avatarPath = req.files.avatar?.[0]?.filename || null;
+
+    await connection.query(`
+      INSERT INTO personal_kyc (
+        userId, title, firstname, middlename, lastname, dateofbirth, gender, maritalstatus, nationalid, residentiallocation, spousename, spousecontact, avatar
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        title=VALUES(title),
+        firstname=VALUES(firstname),
+        middlename=VALUES(middlename),
+        lastname=VALUES(lastname),
+        dateofbirth=VALUES(dateofbirth),
+        gender=VALUES(gender),
+        maritalstatus=VALUES(maritalstatus),
+        nationalid=VALUES(nationalid),
+        residentiallocation=VALUES(residentiallocation),
+        spousename=VALUES(spousename),
+        spousecontact=VALUES(spousecontact),
+        avatar=VALUES(avatar)
+    `, [
+      userId,
+      req.body.title,
+      req.body.firstName,
+      req.body.middleName,
+      req.body.lastName,
+      req.body.dateOfBirth,
+      req.body.gender,
+      req.body.maritalStatus,
+      req.body.nationalId,
+      req.body.residentialLocation,
+      req.body.spouseName,
+      req.body.spouseContact,
+      avatarPath
+    ]);
+
+    // ==================
+    // Generate KYC Code
+    // ==================
+    // Fetch the personal_kyc ID (auto-increment)
+    const [kycResult] = await connection.query(`
+      SELECT pid FROM personal_kyc WHERE userId = ? LIMIT 1
+    `, [userId]);
+
+
+   ;
+
+   // const kycId = kycResult[0]?.id || 1;
+   const kycId = kycResult[0]?.pid || 1;
+    const kycCode = String(kycId).padStart(5, '0'); // "00001"
+
+    // Update personal_kyc with generated code
+    await connection.query(`
+      UPDATE personal_kyc SET kycCode = ? WHERE userId = ?
+    `, [kycCode, userId]);
+
+
+
+    const message = `Your KYC has been submitted successfully. KYC Code: ${kycCode}`;
+    const notificationSql = `
+      INSERT INTO notification (userId, message, type, isRead)
+      VALUES (?, ?, ?, ?)
+`;
+    await connection.query(notificationSql, [userId, message, 'kyc', 0]);
+
+    // ==================
+    // 2. Contact Inf
+    // ==================
+    await connection.query(`
+      INSERT INTO contact_kyc (userId, mobileNumber, email, residentialAddress, residentialLandmark, city, state, alternatePhone)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        residentialAddress=VALUES(residentialAddress),
+        residentialLandmark=VALUES(residentialLandmark),
+        city=VALUES(city),
+        state=VALUES(state),
+        alternatePhone=VALUES(alternatePhone)
+    `, [
+      userId,
+      req.body.mobileNumber,
+      req.body.email,
+      req.body.residentialAddress,
+      req.body.residentialLandmark,
+      req.body.city,
+      req.body.state,
+      req.body.alternatePhone
+    ]);
+
+    // ==================
+    // 3. Employment Info
+    // ==================
+    await connection.query(`
+      INSERT INTO employment_kyc (
+        userId, employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment, workPlaceLocation, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessName, businessType, monthlyBusinessIncome, businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness, workingCapital, businessPicture
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        employmentStatus=VALUES(employmentStatus),
+        employerName=VALUES(employerName),
+        jobTitle=VALUES(jobTitle),
+        monthlyIncome=VALUES(monthlyIncome),
+        yearsInCurrentEmployment=VALUES(yearsInCurrentEmployment),
+        workPlaceLocation=VALUES(workPlaceLocation),
+        payslip=VALUES(payslip),
+        ghanaCardFront=VALUES(ghanaCardFront),
+        ghanaCardBack=VALUES(ghanaCardBack),
+        employmentId=VALUES(employmentId),
+        businessName=VALUES(businessName),
+        businessType=VALUES(businessType),
+        monthlyBusinessIncome=VALUES(monthlyBusinessIncome),
+        businessLocation=VALUES(businessLocation),
+        businessGpsAddress=VALUES(businessGpsAddress),
+        numberOfWorkers=VALUES(numberOfWorkers),
+        yearsInBusiness=VALUES(yearsInBusiness),
+        workingCapital=VALUES(workingCapital),
+        businessPicture=VALUES(businessPicture)
+    `, [
+      userId,
+      req.body.employmentStatus,
+      toNull(req.body.employerName),
+      toNull(req.body.jobTitle),
+      toNull(req.body.monthlyIncome),
+      toNull(req.body.yearsInCurrentEmployment),
+      toNull(req.body.workPlaceLocation),
+      req.files.payslip?.[0]?.filename || null,
+      req.files.ghanaCardFront?.[0]?.filename || null,
+      req.files.ghanaCardBack?.[0]?.filename || null,
+      req.files.employmentId?.[0]?.filename || null,
+      toNull(req.body.businessName),
+      toNull(req.body.businessType),
+      toNull(req.body.monthlyBusinessIncome),
+      toNull(req.body.businessLocation),
+      toNull(req.body.businessGpsAddress),
+      toNull(req.body.numberOfWorkers),
+      toNull(req.body.yearsInBusiness),
+      toNull(req.body.workingCapital),
+      req.files.businessPicture?.[0]?.filename || null
+    ]);
+
+    // ==================
+    // 4. Reference Info
+    // ==================
+    await connection.query(`
+      INSERT INTO reference_kyc (userId, referenceName1, referencePhone1, referenceRelationship1, referenceName2, referencePhone2, referenceRelationship2)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        referenceName1=VALUES(referenceName1),
+        referencePhone1=VALUES(referencePhone1),
+        referenceRelationship1=VALUES(referenceRelationship1),
+        referenceName2=VALUES(referenceName2),
+        referencePhone2=VALUES(referencePhone2),
+        referenceRelationship2=VALUES(referenceRelationship2)
+    `, [
+      userId,
+      req.body.referenceName1,
+      req.body.referencePhone1,
+      req.body.referenceRelationship1,
+      req.body.referenceName2,
+      req.body.referencePhone2,
+      req.body.referenceRelationship2
+    ]);
+
+    await connection.commit();
+
+    res.json({ success: true, kycCode });
+  } catch (err) {
+    console.error("Transaction error:", err);
+    await connection.rollback();
+    res.status(500).json({ success: false, message: "Failed to save KYC" });
+  } finally {
+    connection.release();
+  }
+});
+*/
 
 
 
@@ -1641,6 +1877,89 @@ app.get("/loan-check/:userId", (req, res) => {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*app.post("/loan/approve", (req, res) => {
+  const { id } = req.body;
+
+  db.query(
+    `UPDATE momo_details 
+     SET loan_status = 'approved'
+     WHERE id = ?`,
+    [id],
+    (err, result) => {
+      if (err) return res.status(500).json(err);
+      res.json({ message: "Approved" });
+    }
+  );
+});  */
+
+
+
+/*app.post("/loan/approve", (req, res) => {
+  const { kyc_code } = req.body;
+
+  db.query(
+    `UPDATE momo_details 
+     SET loan_status = 'approved'
+     WHERE kyc_code = ?`,
+    [kyc_code],
+    (err, result) => {
+      if (err) return res.status(500).json(err);
+      res.json({ message: "Approved" });
+    }
+  );
+});*/
+
+
+/*app.post("/loan/approve", (req, res) => {
+  const { loan_id } = req.body;
+
+  db.query(
+    `UPDATE momo_details 
+     SET loan_status = 'approved'
+     WHERE loan_id = ?`,
+    [loan_id],
+    (err) => {
+      if (err) return res.status(500).json(err);
+
+      res.json({ message: "Loan approved successfully" });
+    }
+  );
+});*/
+
+
+
+
+
+
+
+/*app.get("/api/admin/approved-loans", (req, res) => {
+  db.query(
+    `SELECT * FROM full_loan_kyc_view WHERE loan_status = 'approved'`,
+    (err, result) => {
+      if (err) return res.status(500).json(err);
+      res.json(result);
+    }
+  );
+});*/
+
+
 app.get("/api/admin/approved-loans", (req, res) => {
   db.query(
     `SELECT * FROM full_loan_kyc_view2
@@ -1653,6 +1972,8 @@ app.get("/api/admin/approved-loans", (req, res) => {
     }
   );
 });
+
+
 
 
 
@@ -1775,6 +2096,40 @@ app.post("/api/accounts/create", upload.single("image"), (req, res) => {
 
 
 
+
+
+
+
+/* app.post("/loan/reject", (req, res) => {
+  const { loan_id } = req.body;
+
+  if (!loan_id) {
+    return res.status(400).json({ error: "loan_id is required" });
+  }
+
+  const sql = `
+    UPDATE momo_details 
+    SET loan_status = 'rejected' 
+    WHERE loan_id = ?
+  `;
+
+  db.query(sql, [loan_id], (err, result) => {
+    if (err) {
+      console.error("Error rejecting loan:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Loan not found" });
+    }
+
+    res.json({
+      message: "Loan rejected successfully",
+      loan_id,
+    });
+  });
+});*/
+
 app.post("/loan/reject", (req, res) => {
   const { loan_id } = req.body;
 
@@ -1807,6 +2162,201 @@ app.post("/loan/reject", (req, res) => {
 });
 
 
+// =========================
+// SAFE HELPER (FIX FOR UNDEFINED ERROR)
+// =========================
+/* const safe = (value) => (value === undefined ? null : value);
+
+// =========================
+// LOAN EVALUATION API
+// =========================
+app.post("/api/loan/evaluate", async (req, res) => {
+  const connection = await dbPromise.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const { loan, collateral, creditData, finalDecision } = req.body;
+
+    const loanId = loan.loan_id || loan.id;
+
+    // 🚨 Ensure kyc_code exists
+    if (!loan?.kyc_code) {
+      throw new Error("kyc_code is required to update momo_details");
+    }
+
+    // =========================
+    // 1. LOANS_EVAL TABLE
+    // =========================
+    await connection.execute(
+      `INSERT INTO loans_eval (
+        loan_id,
+        kyc_code,
+        applicant_fullName,
+        mobileNumber,
+        loanAmount,
+        loan_status,
+        loanPurpose,
+        applicant_created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(loan.kyc_code),
+        safe(loan.applicant_fullName),
+        safe(loan.mobileNumber),
+        safe(loan.loanAmount),
+        safe(loan.loan_status),
+        safe(loan.loanPurpose),
+        safe(loan.applicant_created_at),
+      ]
+    );
+
+    // =========================
+    // 2. COLLATERAL TABLE
+    // =========================
+    await connection.execute(
+      `INSERT INTO loan_collaterals (
+        loan_id,
+        lending_type,
+        collateral_type,
+        collateral_data
+      ) VALUES (?, ?, ?, ?)`,
+      [
+        safe(loanId),
+
+        // enforce enum values
+        collateral?.lendingType === "secured" || collateral?.lendingType === "unsecured"
+          ? collateral.lendingType
+          : null,
+
+        safe(collateral?.collateralType),
+
+        JSON.stringify(collateral?.formData || {}),
+      ]
+    );
+
+    // =========================
+    // 3. CREDIT ASSESSMENT
+    // =========================
+    await connection.execute(
+      `INSERT INTO borrower_credit_assessments (
+        loan_id,
+        is_creditworthy,
+        is_able_to_pay,
+        business_overview,
+        business_location,
+        business_start_date,
+        nearest_landmark,
+        business_description,
+        current_stock_value,
+        started_business_with,
+        source_of_fund,
+        principal,
+        rate,
+        loan_term,
+        interest,
+        loan_amount,
+        monthly_installment,
+        gross_margin_percentage,
+        monthly_sales_revenue,
+        cost_of_goods_sold,
+        gross_profit,
+        total_operating_expenses,
+        net_business_profit,
+        household_expenses,
+        other_income,
+        household_surplus,
+        loan_recommendation,
+        pay_capacity,
+        extra_data
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        creditData.isCreditworthy ? 1 : 0,
+        creditData.isAbleToPay ? 1 : 0,
+        safe(creditData.businessOverview),
+        safe(creditData.businessLocation),
+        safe(creditData.businessStartDate),
+        safe(creditData.nearestLandmark),
+        safe(creditData.businessDescription),
+        safe(creditData.currentStockValue),
+        safe(creditData.startedBusinessWith),
+        safe(creditData.sourceOfFund),
+        safe(creditData.principal),
+        safe(creditData.rate),
+        safe(creditData.loanTerm),
+        safe(creditData.interest),
+        safe(creditData.loanAmount),
+        safe(creditData.monthlyInstallment),
+        safe(creditData.grossMarginPercentage),
+        safe(creditData.monthlySalesRevenue),
+        safe(creditData.costOfGoodsSold),
+        safe(creditData.grossProfit),
+        safe(creditData.totalOperatingExpenses),
+        safe(creditData.netBusinessProfit),
+        safe(creditData.householdExpenses),
+        safe(creditData.otherIncome),
+        safe(creditData.householdSurplus),
+        safe(creditData.loanRecommendation),
+        safe(creditData.payCapacity),
+        JSON.stringify(creditData.extraData || {}),
+      ]
+    );
+
+    // =========================
+    // 4. FINAL DECISION
+    // =========================
+    await connection.execute(
+      `INSERT INTO loan_final_decisions (
+        loan_id,
+        comments,
+        is_confirmed
+      ) VALUES (?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(finalDecision.comments),
+        finalDecision.confirmed ? 1 : 0,
+      ]
+    );
+
+    // =========================
+    // 5. SOFT DELETE MOMO DETAILS ✅
+    // =========================
+    const [momoResult] = await connection.execute(
+      `UPDATE momo_details 
+       SET is_deleted = 1 
+       WHERE kyc_code = ?`,
+      [safe(loan.kyc_code)]
+    );
+
+    if (momoResult.affectedRows === 0) {
+      console.warn("⚠️ No momo_details record found for this kyc_code");
+    }
+
+    // =========================
+    // COMMIT TRANSACTION
+    // =========================
+    await connection.commit();
+
+    res.json({
+      message: "Loan evaluation saved & momo details updated successfully",
+      loan_id: loanId,
+    });
+
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("❌ Evaluation Error:", error);
+
+    res.status(500).json({
+      message: "Error saving loan evaluation",
+      error: error.message,
+    });
+
+  } finally {
+    connection.release();
+  }
+});*/
 
 
 // =========================
