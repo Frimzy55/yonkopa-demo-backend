@@ -103,7 +103,7 @@ app.use(cors({
 
 
 
-// ✅ Middleware
+// ✅ Middlewar
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
