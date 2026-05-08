@@ -38,7 +38,7 @@ const PORT = process.env.PORT || 5000;
 //const JWT_SECRET = process.env.JWT_SECRET
 const JWT_SECRET = process.env.NODE_ENV === "development" 
   ? process.env.JWT_SECRET_DEV
-  : process.env.JWT_SECRET_PROD;
+  : process.env.JWT_SECRET;
 
 const PAYSTACK_SECRET_KEY = process.env.NODE_ENV === "development" 
   ? process.env.PAYSTACK_SECRET_KEY_DEV
