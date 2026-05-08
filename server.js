@@ -136,11 +136,11 @@ const dbConfig = process.env.NODE_ENV === "development"
       port: process.env.DB_PORT_DEV,
     }
   : {
-      host: process.env.DB_HOST_PROD,
-      user: process.env.DB_USER_PROD,
-      password: process.env.DB_PASSWORD_PROD,
-      database: process.env.DB_NAME_PROD,
-      port: process.env.DB_PORT_PROD,
+      host: process.env.DB_HOST,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+      port: process.env.PORT,
     };
 
 const db = mysql.createPool({
