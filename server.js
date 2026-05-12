@@ -182,6 +182,58 @@ const upload = multer({
 
 
 
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({
+      success: false,
+      message: `Upload error: ${err.message}`,
+    });
+  }
+
+  if (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
+  next();
+});
+
+
+
+
+
+const compressImage = async (req, res, next) => {
+  if (!req.files) return next();
+
+  for (const field in req.files) {
+    for (const file of req.files[field]) {
+      const inputPath = file.path;
+
+      const outputPath = inputPath.replace(
+        path.extname(inputPath),
+        ".jpg"
+      );
+
+      try {
+        await sharp(inputPath)
+          .resize(1200) // reduce size
+          .jpeg({ quality: 70 }) // compress
+          .toFile(outputPath);
+
+        fs.unlinkSync(inputPath); // delete original
+
+        file.filename = path.basename(outputPath);
+        file.path = outputPath;
+      } catch (err) {
+        console.error("Compression error:", err);
+      }
+    }
+  }
+
+  next();
+};
 
 
 const dbConfig = process.env.NODE_ENV === "development" 
@@ -918,7 +970,7 @@ app.delete('/users/:id', (req, res) => {
 
 app.post(
   "/api/kyc/save-all",
-  authenticateToken,
+  authenticateToken,compressImage,
   upload.fields([
     { name: "avatar", maxCount: 1 },
     { name: "payslip", maxCount: 1 },
