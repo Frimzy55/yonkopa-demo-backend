@@ -127,7 +127,6 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const upload = multer({ storage });*/
 
 
-
 // storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -146,6 +145,7 @@ const storage = multer.diskStorage({
   },
 });
 
+// file filter
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [
     "image/jpeg",
@@ -171,8 +171,14 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-
-
+// ✅ THIS WAS MISSING
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 25 * 1024 * 1024
+  }
+});
 
 
 
