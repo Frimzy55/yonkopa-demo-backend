@@ -78,7 +78,8 @@ const allowedOrigins = [
   "http://localhost:3000",
   "https://yonkopa-frontend.vercel.app",
   "https://yonkopa-frontend-app.vercel.app",
-   "https://yonkopamicrocredit.com"
+  "https://yonkopamicrocredit.com",
+  "https://207.154.233.29"
 ];
 
 app.use(cors({
@@ -653,7 +654,7 @@ app.use("/uploads", express.static("uploads"));
 //app.use("/api/loan", loanRoutes);
 
 //GET all customers
-app.get("/api/customers/all", (req, res) => {
+app.get("/api/customers/all",(req, res) => {
   const sql = `
     SELECT id, kycCode, firstName, middleName, lastName, dateOfBirth, gender,
            mobileNumber, email, city, employmentStatus, monthlyIncome
@@ -859,233 +860,267 @@ app.delete('/users/:id', (req, res) => {
 
 
 
+app.post(
+  "/api/kyc/save-all",
+  authenticateToken,
+  upload.fields([
+    { name: "avatar", maxCount: 1 },
+    { name: "payslip", maxCount: 1 },
+    { name: "ghanaCardFront", maxCount: 1 },
+    { name: "ghanaCardBack", maxCount: 1 },
+    { name: "employmentId", maxCount: 1 },
+    { name: "businessPicture", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    const connection = await db.promise().getConnection();
 
-app.post("/api/kyc/save-all", authenticateToken, upload.fields([
-  { name: "avatar", maxCount: 1 },
-  { name: "payslip", maxCount: 1 },
-  { name: "ghanaCardFront", maxCount: 1 },
-  { name: "ghanaCardBack", maxCount: 1 },
-  { name: "employmentId", maxCount: 1 },
-  { name: "businessPicture", maxCount: 1 },
-]), async (req, res) => {
+    try {
+      await connection.beginTransaction();
 
-  const connection = await db.promise().getConnection();
+      const userId = req.user.userId;
 
-  try {
-    await connection.beginTransaction();
+      const toNull = (v) => (v === "" || v === undefined ? null : v);
 
-    const userId = req.user.userId;
-    const toNull = (v) => (v === "" ? null : v);
+      // =========================
+      // SAFE FILE ACCESS
+      // =========================
+      const files = req.files || {};
 
-    const avatarPath = req.files.avatar?.[0]?.filename || null;
+      const avatarPath = files?.avatar?.[0]?.filename || null;
 
-    // =========================
-    // 1. PERSONAL KYC
-    // =========================
-    const [personalResult] = await connection.query(`
-      INSERT INTO personal_kyc (
-        userId, title, firstname, middlename, lastname,
-        dateofbirth, gender, maritalstatus, nationalid,
-        residentiallocation, spousename, spousecontact, avatar
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        title=VALUES(title),
-        firstname=VALUES(firstname),
-        middlename=VALUES(middlename),
-        lastname=VALUES(lastname),
-        dateofbirth=VALUES(dateofbirth),
-        gender=VALUES(gender),
-        maritalstatus=VALUES(maritalstatus),
-        nationalid=VALUES(nationalid),
-        residentiallocation=VALUES(residentiallocation),
-        spousename=VALUES(spousename),
-        spousecontact=VALUES(spousecontact),
-        avatar=VALUES(avatar)
-    `, [
-      userId,
-      req.body.title,
-      req.body.firstName,
-      req.body.middleName,
-      req.body.lastName,
-      req.body.dateOfBirth,
-      req.body.gender,
-      req.body.maritalStatus,
-      req.body.nationalId,
-      req.body.residentialLocation,
-      req.body.spouseName,
-      req.body.spouseContact,
-      avatarPath
-    ]);
+      // =========================
+      // 1. PERSONAL KYC
+      // =========================
+      await connection.query(
+        `
+        INSERT INTO personal_kyc (
+          userId, title, firstname, middlename, lastname,
+          dateofbirth, gender, maritalstatus, nationalid,
+          residentiallocation, spousename, spousecontact, avatar
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          title=VALUES(title),
+          firstname=VALUES(firstname),
+          middlename=VALUES(middlename),
+          lastname=VALUES(lastname),
+          dateofbirth=VALUES(dateofbirth),
+          gender=VALUES(gender),
+          maritalstatus=VALUES(maritalstatus),
+          nationalid=VALUES(nationalid),
+          residentiallocation=VALUES(residentiallocation),
+          spousename=VALUES(spousename),
+          spousecontact=VALUES(spousecontact),
+          avatar=VALUES(avatar)
+      `,
+        [
+          userId,
+          req.body.title,
+          req.body.firstName,
+          req.body.middleName,
+          req.body.lastName,
+          req.body.dateOfBirth,
+          req.body.gender,
+          req.body.maritalStatus,
+          req.body.nationalId,
+          req.body.residentialLocation,
+          req.body.spouseName,
+          req.body.spouseContact,
+          avatarPath,
+        ]
+      );
 
-    // get PID safely
-    const [kycRow] = await connection.query(
-      `SELECT pid FROM personal_kyc WHERE userId = ? LIMIT 1`,
-      [userId]
-    );
+      // =========================
+      // GET PID
+      // =========================
+      const [kycRow] = await connection.query(
+        `SELECT pid FROM personal_kyc WHERE userId = ? LIMIT 1`,
+        [userId]
+      );
 
-    const pid = kycRow[0]?.pid;
+      const pid = kycRow?.[0]?.pid;
 
-    if (!pid) throw new Error("Failed to generate KYC ID");
+      if (!pid) throw new Error("Failed to generate KYC ID");
 
-    const kycCode = String(pid).padStart(5, "0");
+      const kycCode = String(pid).padStart(5, "0");
 
-    // update kycCode BEFORE cloning
-    await connection.query(
-      `UPDATE personal_kyc SET kycCode = ? WHERE pid = ?`,
-      [kycCode, pid]
-    );
+      await connection.query(
+        `UPDATE personal_kyc SET kycCode = ? WHERE pid = ?`,
+        [kycCode, pid]
+      );
 
-    // =========================
-    // NOTIFICATION
-    // =========================
-    const message = `Your KYC has been submitted successfully. KYC Code: ${kycCode}`;
+      // =========================
+      // NOTIFICATION
+      // =========================
+      await connection.query(
+        `
+        INSERT INTO notification (userId, message, type, isRead)
+        VALUES (?, ?, ?, ?)
+      `,
+        [
+          userId,
+          `Your KYC has been submitted successfully. KYC Code: ${kycCode}`,
+          "kyc",
+          0,
+        ]
+      );
 
-    await connection.query(`
-      INSERT INTO notification (userId, message, type, isRead)
-      VALUES (?, ?, ?, ?)
-    `, [userId, message, "kyc", 0]);
+      // =========================
+      // 2. CONTACT KYC
+      // =========================
+      await connection.query(
+        `
+        INSERT INTO contact_kyc (
+          userId, mobileNumber, email, residentialAddress,
+          residentialLandmark, city, state, alternatePhone, kyc_code
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          residentialAddress=VALUES(residentialAddress),
+          residentialLandmark=VALUES(residentialLandmark),
+          city=VALUES(city),
+          state=VALUES(state),
+          alternatePhone=VALUES(alternatePhone),
+          kyc_code=VALUES(kyc_code)
+      `,
+        [
+          userId,
+          req.body.mobileNumber,
+          req.body.email,
+          req.body.residentialAddress,
+          req.body.residentialLandmark,
+          req.body.city,
+          req.body.state,
+          req.body.alternatePhone,
+          kycCode,
+        ]
+      );
 
-    // =========================
-    // 2. CONTACT KYC
-    // =========================
-    await connection.query(`
-      INSERT INTO contact_kyc (
-        userId, mobileNumber, email, residentialAddress,
-        residentialLandmark, city, state, alternatePhone,kyc_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)
-      ON DUPLICATE KEY UPDATE
-        residentialAddress=VALUES(residentialAddress),
-        residentialLandmark=VALUES(residentialLandmark),
-        city=VALUES(city),
-        state=VALUES(state),
-        alternatePhone=VALUES(alternatePhone),
-         kyc_code=VALUES(kyc_code)
-    `, [
-      userId,
-      req.body.mobileNumber,
-      req.body.email,
-      req.body.residentialAddress,
-      req.body.residentialLandmark,
-      req.body.city,
-      req.body.state,
-      req.body.alternatePhone,
-       kycCode   // ✅ ADD THIS
+      // =========================
+      // 3. EMPLOYMENT KYC
+      // =========================
+      await connection.query(
+        `
+        INSERT INTO employment_kyc (
+          userId, employmentStatus, employerName, jobTitle,
+          monthlyIncome, yearsInCurrentEmployment, workPlaceLocation,
+          payslip, ghanaCardFront, ghanaCardBack, employmentId,
+          businessName, businessType, monthlyBusinessIncome,
+          businessLocation, businessGpsAddress, numberOfWorkers,
+          yearsInBusiness, workingCapital, businessPicture, kyc_code
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          employmentStatus=VALUES(employmentStatus),
+          employerName=VALUES(employerName),
+          jobTitle=VALUES(jobTitle),
+          monthlyIncome=VALUES(monthlyIncome),
+          yearsInCurrentEmployment=VALUES(yearsInCurrentEmployment),
+          workPlaceLocation=VALUES(workPlaceLocation),
+          payslip=VALUES(payslip),
+          ghanaCardFront=VALUES(ghanaCardFront),
+          ghanaCardBack=VALUES(ghanaCardBack),
+          employmentId=VALUES(employmentId),
+          businessName=VALUES(businessName),
+          businessType=VALUES(businessType),
+          monthlyBusinessIncome=VALUES(monthlyBusinessIncome),
+          businessLocation=VALUES(businessLocation),
+          businessGpsAddress=VALUES(businessGpsAddress),
+          numberOfWorkers=VALUES(numberOfWorkers),
+          yearsInBusiness=VALUES(yearsInBusiness),
+          workingCapital=VALUES(workingCapital),
+          businessPicture=VALUES(businessPicture),
+          kyc_code=VALUES(kyc_code)
+      `,
+        [
+          userId,
+          req.body.employmentStatus,
+          toNull(req.body.employerName),
+          toNull(req.body.jobTitle),
+          toNull(req.body.monthlyIncome),
+          toNull(req.body.yearsInCurrentEmployment),
+          toNull(req.body.workPlaceLocation),
 
-    ]);
+          files?.payslip?.[0]?.filename || null,
+          files?.ghanaCardFront?.[0]?.filename || null,
+          files?.ghanaCardBack?.[0]?.filename || null,
+          files?.employmentId?.[0]?.filename || null,
 
-    // =========================
-    // 3. EMPLOYMENT KYC
-    // =========================
-    await connection.query(`
-      INSERT INTO employment_kyc (
-        userId, employmentStatus, employerName, jobTitle,
-        monthlyIncome, yearsInCurrentEmployment, workPlaceLocation,
-        payslip, ghanaCardFront, ghanaCardBack, employmentId,
-        businessName, businessType, monthlyBusinessIncome,
-        businessLocation, businessGpsAddress, numberOfWorkers,
-        yearsInBusiness, workingCapital, businessPicture,kyc_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
-      ON DUPLICATE KEY UPDATE
-        employmentStatus=VALUES(employmentStatus),
-        employerName=VALUES(employerName),
-        jobTitle=VALUES(jobTitle),
-        monthlyIncome=VALUES(monthlyIncome),
-        yearsInCurrentEmployment=VALUES(yearsInCurrentEmployment),
-        workPlaceLocation=VALUES(workPlaceLocation),
-        payslip=VALUES(payslip),
-        ghanaCardFront=VALUES(ghanaCardFront),
-        ghanaCardBack=VALUES(ghanaCardBack),
-        employmentId=VALUES(employmentId),
-        businessName=VALUES(businessName),
-        businessType=VALUES(businessType),
-        monthlyBusinessIncome=VALUES(monthlyBusinessIncome),
-        businessLocation=VALUES(businessLocation),
-        businessGpsAddress=VALUES(businessGpsAddress),
-        numberOfWorkers=VALUES(numberOfWorkers),
-        yearsInBusiness=VALUES(yearsInBusiness),
-        workingCapital=VALUES(workingCapital),
-        businessPicture=VALUES(businessPicture),
-        kyc_code=VALUES(kyc_code)
-    `, [
-      userId,
-      req.body.employmentStatus,
-      toNull(req.body.employerName),
-      toNull(req.body.jobTitle),
-      toNull(req.body.monthlyIncome),
-      toNull(req.body.yearsInCurrentEmployment),
-      toNull(req.body.workPlaceLocation),
-      req.files.payslip?.[0]?.filename || null,
-      req.files.ghanaCardFront?.[0]?.filename || null,
-      req.files.ghanaCardBack?.[0]?.filename || null,
-      req.files.employmentId?.[0]?.filename || null,
-      toNull(req.body.businessName),
-      toNull(req.body.businessType),
-      toNull(req.body.monthlyBusinessIncome),
-      toNull(req.body.businessLocation),
-      toNull(req.body.businessGpsAddress),
-      toNull(req.body.numberOfWorkers),
-      toNull(req.body.yearsInBusiness),
-      toNull(req.body.workingCapital),
-      req.files.businessPicture?.[0]?.filename || null,
-         kycCode   // ✅ ADD THIS
-    ]);
+          toNull(req.body.businessName),
+          toNull(req.body.businessType),
+          toNull(req.body.monthlyBusinessIncome),
+          toNull(req.body.businessLocation),
+          toNull(req.body.businessGpsAddress),
+          toNull(req.body.numberOfWorkers),
+          toNull(req.body.yearsInBusiness),
+          toNull(req.body.workingCapital),
 
-    // =========================
-    // 4. REFERENCE KYC
-    // =========================
-    await connection.query(`
-      INSERT INTO reference_kyc (
-        userId, referenceName1, referencePhone1, referenceRelationship1,
-        referenceName2, referencePhone2, referenceRelationship2,kyc_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?,?)
-      ON DUPLICATE KEY UPDATE
-        referenceName1=VALUES(referenceName1),
-        referencePhone1=VALUES(referencePhone1),
-        referenceRelationship1=VALUES(referenceRelationship1),
-        referenceName2=VALUES(referenceName2),
-        referencePhone2=VALUES(referencePhone2),
-        referenceRelationship2=VALUES(referenceRelationship2),
-        kyc_code=VALUES(kyc_code)
-    `, [
-      userId,
-      req.body.referenceName1,
-      req.body.referencePhone1,
-      req.body.referenceRelationship1,
-      req.body.referenceName2,
-      req.body.referencePhone2,
-      req.body.referenceRelationship2,
-       kycCode   // ✅ ADD THIS
-    ]);
+          files?.businessPicture?.[0]?.filename || null,
+          kycCode,
+        ]
+      );
 
-    // =========================
-    // 5. CLONE TABLES (FINAL STEP)
-    // =========================
+      // =========================
+      // 4. REFERENCE KYC
+      // =========================
+      await connection.query(
+        `
+        INSERT INTO reference_kyc (
+          userId, referenceName1, referencePhone1, referenceRelationship1,
+          referenceName2, referencePhone2, referenceRelationship2, kyc_code
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          referenceName1=VALUES(referenceName1),
+          referencePhone1=VALUES(referencePhone1),
+          referenceRelationship1=VALUES(referenceRelationship1),
+          referenceName2=VALUES(referenceName2),
+          referencePhone2=VALUES(referencePhone2),
+          referenceRelationship2=VALUES(referenceRelationship2),
+          kyc_code=VALUES(kyc_code)
+      `,
+        [
+          userId,
+          req.body.referenceName1,
+          req.body.referencePhone1,
+          req.body.referenceRelationship1,
+          req.body.referenceName2,
+          req.body.referencePhone2,
+          req.body.referenceRelationship2,
+          kycCode,
+        ]
+      );
 
-    await connection.commit();
+      // =========================
+      // COMMIT
+      // =========================
+      await connection.commit();
 
-    res.json({
-      success: true,
-      kycCode
-    });
+      return res.json({
+        success: true,
+        kycCode,
+      });
 
-  } catch (err) {
-    console.error("Transaction error:", err);
-    await connection.rollback();
+    } catch (err) {
+      console.error("🔥 FULL KYC ERROR:");
+      console.error("Message:", err.message);
+      console.error("Code:", err.code);
+      console.error(err);
 
-    res.status(500).json({
-      success: false,
-      message: "Failed to save KYC"
-    });
+      await connection.rollback();
 
-  } finally {
-    connection.release();
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+        code: err.code || "SERVER_ERROR",
+      });
+
+    } finally {
+      connection.release();
+    }
   }
-});
+);
 
 
 
 
-app.get("/api/kyc/avatar/:userId", (req, res) => {
+app.get("/api/kyc/avatar/:userId",(req, res) => {
   const { userId } = req.params;
 
   const sql = `SELECT avatar FROM personal_kyc WHERE userId = ? LIMIT 1`;
@@ -1110,7 +1145,7 @@ app.get("/api/kyc/avatar/:userId", (req, res) => {
 
 
 
-app.get("/api/notifications/:userId", (req, res) => {
+app.get("/api/notifications/:userId",(req, res) => {
 
   const { userId } = req.params;
 
@@ -1139,7 +1174,7 @@ app.get("/api/notifications/:userId", (req, res) => {
 
 
 
-app.get("/api/kyc/check/:userId", (req, res) => {
+app.get("/api/kyc/check/:userId",(req, res) => {
   const { userId } = req.params;
 
   const sql = `
@@ -1505,7 +1540,7 @@ app.post(
   }
 );
 
-app.get("/api/loan-status/:userId", (req, res) => {
+app.get("/api/loan-status/:userId",(req, res) => {
   const { userId } = req.params;
 
   const sql = `
@@ -1720,7 +1755,7 @@ app.get("/api/customer/:kyc_code", (req, res) => {
 
 
    
-app.post("/api/accounts/create", upload.single("image"), (req, res) => {
+app.post("/api/accounts/create",upload.single("image"), (req, res) => {
   const {
     kyc_code,
     firstName,
@@ -2153,6 +2188,85 @@ app.get("/api/admin/approved-loan", (req, res) => {
 
 
 
+
+
+
+
+
+app.post("/assign-tasks", (req, res) => {
+  const { userId, staff_name, tasks } = req.body;
+
+  if (!userId || !tasks || !Array.isArray(tasks)) {
+    return res.status(400).json({
+      message: "Invalid request data"
+    });
+  }
+
+  const values = tasks.map(task => [
+    userId,
+    staff_name,
+    task
+  ]);
+
+  const sql = `
+    INSERT INTO tasks (userId, staff_name, task_name)
+    VALUES ?
+  `;
+
+  db.query(sql, [values], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({
+        message: "Failed to assign tasks"
+      });
+    }
+
+    res.json({
+      message: "Tasks assigned successfully"
+    });
+  });
+});
+
+
+
+
+
+
+
+
+
+
+// GET USER TASKS / PERMISSIONS
+app.get("/api/user-tasks/:userId", (req, res) => {
+
+  const { userId } = req.params;
+
+  const sql = `
+    SELECT task_name
+    FROM tasks
+    WHERE userId = ?
+    ORDER BY created_at DESC
+  `;
+
+  db.query(sql, [userId], (err, results) => {
+
+    if (err) {
+      console.error("Error fetching tasks:", err);
+
+      return res.status(500).json({
+        message: "Database error"
+      });
+    }
+
+    const tasks = results.map(row => row.task_name);
+
+    res.json({
+      tasks
+    });
+
+  });
+
+});
 
 /* app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
