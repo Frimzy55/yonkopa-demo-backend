@@ -146,28 +146,37 @@ const storage = multer.diskStorage({
   },
 });
 
-// file filter (IMPORTANT FIX)
+// ✅ FIXED FILE FILTER (supports mobile + camera formats)
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = [
+  const allowedMimeTypes = [
     "image/jpeg",
     "image/jpg",
     "image/png",
     "image/webp",
+    "image/heic",
+    "image/heif"
   ];
 
-  if (allowedTypes.includes(file.mimetype)) {
+  const allowedExtensions = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
+
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (
+    allowedMimeTypes.includes(file.mimetype) ||
+    allowedExtensions.includes(ext)
+  ) {
     cb(null, true);
   } else {
-    cb(new Error("Only JPG, PNG, WEBP images are allowed"), false);
+    cb(new Error("Only images (JPG, PNG, WEBP, HEIC) are allowed"));
   }
 };
 
-// upload config
+// 🔥 INCREASE LIMIT (THIS IS IMPORTANT)
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 15 * 1024 * 1024, // 10MB max per file
+    fileSize: 25 * 1024 * 1024, // ✅ 25MB per file
   },
 });
 
