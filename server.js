@@ -146,7 +146,7 @@ const storage = multer.diskStorage({
   },
 });
 
-//  FIXED FILE FILTER (supports mobile + camera formats)
+// ✅ FIXED FILE FILTER (supports mobile camera formats)
 const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     "image/jpeg",
@@ -157,83 +157,42 @@ const fileFilter = (req, file, cb) => {
     "image/heif"
   ];
 
-  const allowedExtensions = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
+  const allowedExtensions = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".heic",
+    ".heif"
+  ];
 
   const ext = path.extname(file.originalname).toLowerCase();
 
-  if (
-    allowedMimeTypes.includes(file.mimetype) ||
-    allowedExtensions.includes(ext)
-  ) {
+  const isMimeValid = allowedMimeTypes.includes(file.mimetype);
+  const isExtValid = allowedExtensions.includes(ext);
+
+  if (isMimeValid || isExtValid) {
     cb(null, true);
   } else {
-    cb(new Error("Only images (JPG, PNG, WEBP, HEIC) are allowed"));
+    cb(new Error("Only images (JPG, PNG, WEBP, HEIC, HEIF) are allowed"));
   }
 };
 
-// 🔥 INCREASE LIMIT (THIS IS IMPORTANT)
+// upload config (IMPORTANT: increase size)
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 25 * 1024 * 1024, // ✅ 25MB per file
-  },
+    fileSize: 25 * 1024 * 1024 // 25MB
+  }
 });
 
-
-
-app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    return res.status(400).json({
-      success: false,
-      message: `Upload error: ${err.message}`,
-    });
-  }
-
-  if (err) {
-    return res.status(400).json({
-      success: false,
-      message: err.message,
-    });
-  }
-
-  next();
-});
+module.exports = upload;
 
 
 
 
 
-const compressImage = async (req, res, next) => {
-  if (!req.files) return next();
-
-  for (const field in req.files) {
-    for (const file of req.files[field]) {
-      const inputPath = file.path;
-
-      const outputPath = inputPath.replace(
-        path.extname(inputPath),
-        ".jpg"
-      );
-
-      try {
-        await sharp(inputPath)
-          .resize(1200) // reduce size
-          .jpeg({ quality: 70 }) // compress
-          .toFile(outputPath);
-
-        fs.unlinkSync(inputPath); // delete original
-
-        file.filename = path.basename(outputPath);
-        file.path = outputPath;
-      } catch (err) {
-        console.error("Compression error:", err);
-      }
-    }
-  }
-
-  next();
-};
 
 
 const dbConfig = process.env.NODE_ENV === "development" 
@@ -970,7 +929,7 @@ app.delete('/users/:id', (req, res) => {
 
 app.post(
   "/api/kyc/save-all",
-  authenticateToken,compressImage,
+  authenticateToken,
   upload.fields([
     { name: "avatar", maxCount: 1 },
     { name: "payslip", maxCount: 1 },
