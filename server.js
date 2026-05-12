@@ -146,7 +146,7 @@ const storage = multer.diskStorage({
   },
 });
 
-// ✅ FIXED FILE FILTER (supports mobile + camera formats)
+//  FIXED FILE FILTER (supports mobile + camera formats)
 const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     "image/jpeg",
