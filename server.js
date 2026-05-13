@@ -2327,6 +2327,29 @@ app.get("/api/user-tasks/:userId", (req, res) => {
 });*/
 
 
+
+
+
+app.get("/tasks2/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  db.query(
+    "SELECT task_name FROM tasks WHERE userId = ?",
+    [userId],
+    (err, rows) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({
+          message: "Server error",
+        });
+      }
+
+      res.json(rows);
+    }
+  );
+});
+
+
 //const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, "0.0.0.0", () => {
