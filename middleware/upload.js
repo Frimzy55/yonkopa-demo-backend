@@ -1,9 +1,4 @@
-// middleware/upload.js
-import multer from "multer";
+import { upload as multerUpload } from '../config/multer.js';
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname)
-});
-
-export const upload = multer({ storage });
+// Re-export the configured multer instance
+export const upload = multerUpload;
