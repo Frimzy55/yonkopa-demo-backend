@@ -126,49 +126,175 @@ router.get("/api/customer/:kyc_code", (req, res) => {
   });
 });
 
-// Loan evaluation (POST) – updates multiple tables
+
+
+
+// ===============================
+// Helpers (ADD THESE AT TOP)
+// ===============================
+
+const toDecimalOrNull = (value) => {
+  if (value === "" || value === null || value === undefined) return null;
+
+  const num = Number(value);
+  return isNaN(num) ? null : num;
+};
+
+const toIntOrNull = (value) => {
+  if (value === "" || value === null || value === undefined) return null;
+
+  const num = parseInt(value);
+  return isNaN(num) ? null : num;
+};
+
+// ===============================
+// Loan evaluation (POST)
+// ===============================
 router.post("/api/loan/evaluate", async (req, res) => {
   const connection = await dbPromise.getConnection();
+
   try {
     await connection.beginTransaction();
+
     const { loan, collateral, creditData, finalDecision } = req.body;
+
     const loanId = loan.loan_id || loan.id;
     if (!loan?.kyc_code) throw new Error("kyc_code is required");
 
+    // ===============================
     // loans_eval
+    // ===============================
     await connection.execute(
-      `INSERT INTO loans_eval (loan_id, kyc_code, applicant_fullName, mobileNumber, loanAmount, loan_status, loanPurpose, applicant_created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [safe(loanId), safe(loan.kyc_code), safe(loan.applicant_fullName), safe(loan.mobileNumber), safe(loan.loanAmount), safe(loan.loan_status), safe(loan.loanPurpose), formatMySQLDate(loan.applicant_created_at)]
+      `INSERT INTO loans_eval (
+        loan_id, kyc_code, applicant_fullName, mobileNumber,
+        loanAmount, loan_status, loanPurpose, applicant_created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(loan.kyc_code),
+        safe(loan.applicant_fullName),
+        safe(loan.mobileNumber),
+        toDecimalOrNull(loan.loanAmount),
+        safe(loan.loan_status),
+        safe(loan.loanPurpose),
+        formatMySQLDate(loan.applicant_created_at),
+      ]
     );
 
+    // ===============================
     // collateral
+    // ===============================
     await connection.execute(
-      `INSERT INTO loan_collaterals (loan_id, lending_type, collateral_type, collateral_data) VALUES (?, ?, ?, ?)`,
-      [safe(loanId), collateral?.lendingType === "secured" || collateral?.lendingType === "unsecured" ? collateral.lendingType : null, safe(collateral?.collateralType), JSON.stringify(collateral?.formData || {})]
+      `INSERT INTO loan_collaterals (
+        loan_id, lending_type, collateral_type, collateral_data
+      ) VALUES (?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        collateral?.lendingType === "secured" ||
+        collateral?.lendingType === "unsecured"
+          ? collateral.lendingType
+          : null,
+        safe(collateral?.collateralType),
+        JSON.stringify(collateral?.formData || {}),
+      ]
     );
 
-    // credit assessment
+    // ===============================
+    // credit assessment (FIXED)
+    // ===============================
     await connection.execute(
-      `INSERT INTO borrower_credit_assessments (loan_id, is_creditworthy, is_able_to_pay, business_overview, business_location, business_start_date, nearest_landmark, business_description, current_stock_value, started_business_with, source_of_fund, principal, rate, loan_term, interest, loan_amount, monthly_installment, gross_margin_percentage, monthly_sales_revenue, cost_of_goods_sold, gross_profit, total_operating_expenses, net_business_profit, household_expenses, other_income, household_surplus, loan_recommendation, pay_capacity, extra_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [safe(loanId), creditData.isCreditworthy ? 1 : 0, creditData.isAbleToPay ? 1 : 0, safe(creditData.businessOverview), safe(creditData.businessLocation), formatMySQLDate(creditData.businessStartDate), safe(creditData.nearestLandmark), safe(creditData.businessDescription), safe(creditData.currentStockValue), safe(creditData.startedBusinessWith), safe(creditData.sourceOfFund), safe(creditData.principal), safe(creditData.rate), safe(creditData.loanTerm), safe(creditData.interest), safe(creditData.loanAmount), safe(creditData.monthlyInstallment), safe(creditData.grossMarginPercentage), safe(creditData.monthlySalesRevenue), safe(creditData.costOfGoodsSold), safe(creditData.grossProfit), safe(creditData.totalOperatingExpenses), safe(creditData.netBusinessProfit), safe(creditData.householdExpenses), safe(creditData.otherIncome), safe(creditData.householdSurplus), safe(creditData.loanRecommendation), safe(creditData.payCapacity), JSON.stringify(creditData.extraData || {})]
+      `INSERT INTO borrower_credit_assessments (
+        loan_id, is_creditworthy, is_able_to_pay,
+        business_overview, business_location, business_start_date,
+        nearest_landmark, business_description,
+        current_stock_value, started_business_with, source_of_fund,
+        principal, rate, loan_term, interest,
+        loan_amount, monthly_installment, gross_margin_percentage,
+        monthly_sales_revenue, cost_of_goods_sold, gross_profit,
+        total_operating_expenses, net_business_profit,
+        household_expenses, other_income, household_surplus,
+        loan_recommendation, pay_capacity, extra_data
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        creditData.isCreditworthy ? 1 : 0,
+        creditData.isAbleToPay ? 1 : 0,
+
+        safe(creditData.businessOverview),
+        safe(creditData.businessLocation),
+        formatMySQLDate(creditData.businessStartDate),
+        safe(creditData.nearestLandmark),
+        safe(creditData.businessDescription),
+
+        toDecimalOrNull(creditData.currentStockValue),
+        toDecimalOrNull(creditData.startedBusinessWith),
+        safe(creditData.sourceOfFund),
+
+        toDecimalOrNull(creditData.principal),
+        toDecimalOrNull(creditData.rate),
+        toDecimalOrNull(creditData.loanTerm),
+        toDecimalOrNull(creditData.interest),
+
+        toDecimalOrNull(creditData.loanAmount),
+        toDecimalOrNull(creditData.monthlyInstallment),
+        toDecimalOrNull(creditData.grossMarginPercentage),
+        toDecimalOrNull(creditData.monthlySalesRevenue),
+        toDecimalOrNull(creditData.costOfGoodsOfSold),
+        toDecimalOrNull(creditData.grossProfit),
+        toDecimalOrNull(creditData.totalOperatingExpenses),
+        toDecimalOrNull(creditData.netBusinessProfit),
+
+        toDecimalOrNull(creditData.householdExpenses),
+        toDecimalOrNull(creditData.otherIncome),
+        toDecimalOrNull(creditData.householdSurplus),
+
+        safe(creditData.loanRecommendation),
+        toDecimalOrNull(creditData.payCapacity),
+
+        JSON.stringify(creditData.extraData || {}),
+      ]
     );
 
+    // ===============================
     // final decision
-    await connection.execute(`INSERT INTO loan_final_decisions (loan_id, comments, is_confirmed) VALUES (?, ?, ?)`, [safe(loanId), safe(finalDecision.comments), finalDecision.confirmed ? 1 : 0]);
+    // ===============================
+    await connection.execute(
+      `INSERT INTO loan_final_decisions (loan_id, comments, is_confirmed)
+       VALUES (?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(finalDecision.comments),
+        finalDecision.confirmed ? 1 : 0,
+      ]
+    );
 
+    // ===============================
     // soft delete momo_details
-    await connection.execute(`UPDATE momo_details SET is_deleted = 1 WHERE kyc_code = ?`, [safe(loan.kyc_code)]);
+    // ===============================
+    await connection.execute(
+      `UPDATE momo_details SET is_deleted = 1 WHERE kyc_code = ?`,
+      [safe(loan.kyc_code)]
+    );
 
     await connection.commit();
-    res.json({ message: "Loan evaluation saved", loan_id: loanId });
+
+    res.json({
+      message: "Loan evaluation saved",
+      loan_id: loanId,
+    });
   } catch (error) {
     await connection.rollback();
     console.error(error);
-    res.status(500).json({ message: "Error saving loan evaluation", error: error.message });
+
+    res.status(500).json({
+      message: "Error saving loan evaluation",
+      error: error.message,
+    });
   } finally {
     connection.release();
   }
 });
+
 
 // Approve loan (update momo_details)
 router.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {

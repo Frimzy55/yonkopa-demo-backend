@@ -23,4 +23,12 @@ router.put("/api/notifications/mark-read/:userId", (req, res) => {
   });
 });
 
+
+
+
+
+
+
+
+
 export default router;

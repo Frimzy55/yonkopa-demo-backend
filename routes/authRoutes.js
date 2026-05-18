@@ -198,6 +198,80 @@ router.post("/api/change-password", (req, res) => {
   });
 });
 
+
+
+
+
+
+
+
+router.post('/api/change-staff-password', async (req, res) => {
+
+  const {
+    currentPassword,
+    newPassword,
+    userId
+  } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({
+      message: 'User ID required'
+    });
+  }
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({
+      message: 'Current password and new password are required'
+    });
+  }
+
+  try {
+
+    const [rows] = await db.promise().query(
+      'SELECT password FROM users1 WHERE userId = ?',
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        message: 'User not found'
+      });
+    }
+
+    const isValid = await bcrypt.compare(
+      currentPassword,
+      rows[0].password
+    );
+
+    if (!isValid) {
+      return res.status(401).json({
+        message: 'Current password is incorrect'
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await db.promise().query(
+      'UPDATE users1 SET password = ? WHERE userId = ?',
+      [hashedPassword, userId]
+    );
+
+    res.json({
+      message: 'Password changed successfully'
+    });
+
+  } catch (error) {
+
+    console.error('Change password error:', error);
+
+    res.status(500).json({
+      message: 'Server error'
+    });
+  }
+});
+
+
+
 // Protected profile route
 router.get('/profile', authenticateToken, (req, res) => {
   res.json({ message: `Welcome ${req.user.email}, your role is ${req.user.role}`, user: req.user });
