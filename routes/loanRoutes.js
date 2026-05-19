@@ -1,12 +1,29 @@
 import express from 'express';
 import { db, dbPromise } from '../config/db.js';
-import { upload, attachRelativePath } from '../config/multer.js';   // ← import both
+import { upload, attachRelativePath } from '../config/multer.js';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 import { formatMySQLDate, safe } from '../utils/helpers.js';
 
 const router = express.Router();
 
+// ===============================
+// Local helpers (not imported)
+// ===============================
+const toDecimalOrNull = (value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  const num = Number(value);
+  return isNaN(num) ? null : num;
+};
+
+const toIntOrNull = (value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  const num = parseInt(value);
+  return isNaN(num) ? null : num;
+};
+
+// ===============================
 // Submit full loan application with guarantor files
+// ===============================
 router.post(
   "/api/loan/submit-full-application",
   upload.fields([
@@ -16,7 +33,7 @@ router.post(
     { name: "guarantorGhanaCardFront" },
     { name: "guarantorGhanaCardBack" },
   ]),
-  attachRelativePath,   // ← ADD THIS middleware
+  attachRelativePath,
   async (req, res) => {
     db.getConnection(async (err, connection) => {
       if (err) return res.status(500).json(err);
@@ -62,7 +79,7 @@ router.post(
           loanFees: loanFees ? parseFloat(loanFees) : null
         });
 
-        // Guarantor info – using relativePath instead of path
+        // Guarantor info
         const files = req.files || {};
         await connection.promise().query("INSERT INTO guarantor_info SET ?", {
           userId, loan_id, kyc_code: kycCode, guarantorName, guarantorPhone, guarantorAddress,
@@ -96,9 +113,9 @@ router.post(
   }
 );
 
-// ... rest of your routes (loan-status, loan-check, etc.) remain unchanged
-
+// ===============================
 // Get loan status for user
+// ===============================
 router.get("/api/loan-status/:userId", (req, res) => {
   const { userId } = req.params;
   const sql = `SELECT loan_status FROM momo_details WHERE userId = ? ORDER BY created_at DESC LIMIT 1`;
@@ -108,7 +125,9 @@ router.get("/api/loan-status/:userId", (req, res) => {
   });
 });
 
+// ===============================
 // Check if user already applied for loan
+// ===============================
 router.get("/loan-check/:userId", (req, res) => {
   const { userId } = req.params;
   db.query("SELECT 1 FROM full_loan_kyc_view WHERE userId = ? LIMIT 1", [userId], (err, rows) => {
@@ -117,7 +136,9 @@ router.get("/loan-check/:userId", (req, res) => {
   });
 });
 
+// ===============================
 // Get customer by kyc_code (for approved loans)
+// ===============================
 router.get("/api/customer/:kyc_code", (req, res) => {
   const { kyc_code } = req.params;
   db.execute(`SELECT * FROM full_loan_kyc_view1 WHERE kyc_code = ? AND loan_status = 'approved' LIMIT 1`, [kyc_code], (err, rows) => {
@@ -126,29 +147,8 @@ router.get("/api/customer/:kyc_code", (req, res) => {
   });
 });
 
-
-
-
 // ===============================
-// Helpers (ADD THESE AT TOP)
-// ===============================
-
-const toDecimalOrNull = (value) => {
-  if (value === "" || value === null || value === undefined) return null;
-
-  const num = Number(value);
-  return isNaN(num) ? null : num;
-};
-
-const toIntOrNull = (value) => {
-  if (value === "" || value === null || value === undefined) return null;
-
-  const num = parseInt(value);
-  return isNaN(num) ? null : num;
-};
-
-// ===============================
-// Loan evaluation (POST)
+// Loan evaluation (POST) – FIXED for numeric fields
 // ===============================
 router.post("/api/loan/evaluate", async (req, res) => {
   const connection = await dbPromise.getConnection();
@@ -156,18 +156,29 @@ router.post("/api/loan/evaluate", async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const { loan, collateral, creditData, finalDecision } = req.body;
+    const {
+      loan = {},
+      collateral = {},
+      creditData = {},
+      finalDecision = {},
+    } = req.body;
 
     const loanId = loan.loan_id || loan.id;
+
+    if (!loanId) throw new Error("loan_id is required");
     if (!loan?.kyc_code) throw new Error("kyc_code is required");
 
-    // ===============================
-    // loans_eval
-    // ===============================
+   // console.log("============== REQUEST DATA ==============");
+   // console.log("loan:", loan);
+    //console.log("collateral:", collateral);
+    //console.log("creditData:", creditData);
+    //console.log("finalDecision:", finalDecision);
+
+    // Insert into loans_eval
     await connection.execute(
       `INSERT INTO loans_eval (
-        loan_id, kyc_code, applicant_fullName, mobileNumber,
-        loanAmount, loan_status, loanPurpose, applicant_created_at
+        loan_id, kyc_code, applicant_fullName, mobileNumber, loanAmount,
+        loan_status, loanPurpose, applicant_created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         safe(loanId),
@@ -181,32 +192,26 @@ router.post("/api/loan/evaluate", async (req, res) => {
       ]
     );
 
-    // ===============================
-    // collateral
-    // ===============================
+    // Insert into loan_collaterals
     await connection.execute(
-      `INSERT INTO loan_collaterals (
-        loan_id, lending_type, collateral_type, collateral_data
-      ) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO loan_collaterals (loan_id, lending_type, collateral_type, collateral_data)
+       VALUES (?, ?, ?, ?)`,
       [
         safe(loanId),
-        collateral?.lendingType === "secured" ||
-        collateral?.lendingType === "unsecured"
-          ? collateral.lendingType
-          : null,
+        (collateral?.lendingType === "secured" || collateral?.lendingType === "unsecured")
+          ? collateral.lendingType : null,
         safe(collateral?.collateralType),
         JSON.stringify(collateral?.formData || {}),
       ]
     );
 
-    // ===============================
-    // credit assessment (FIXED)
-    // ===============================
+    // Insert into borrower_credit_assessments
+    // NOTE: All numeric columns use toDecimalOrNull() to convert empty strings to NULL.
+    // loan_recommendation is numeric → use toDecimalOrNull (fixed!)
     await connection.execute(
       `INSERT INTO borrower_credit_assessments (
         loan_id, is_creditworthy, is_able_to_pay,
-        business_overview, business_location, business_start_date,
-        nearest_landmark, business_description,
+        business_overview, business_location, business_start_date, nearest_landmark, business_description,
         current_stock_value, started_business_with, source_of_fund,
         principal, rate, loan_term, interest,
         loan_amount, monthly_installment, gross_margin_percentage,
@@ -214,89 +219,87 @@ router.post("/api/loan/evaluate", async (req, res) => {
         total_operating_expenses, net_business_profit,
         household_expenses, other_income, household_surplus,
         loan_recommendation, pay_capacity, extra_data
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (
+        ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?,
+        ?, ?, ?,
+        ?, ?, ?
+      )`,
       [
         safe(loanId),
-        creditData.isCreditworthy ? 1 : 0,
-        creditData.isAbleToPay ? 1 : 0,
-
-        safe(creditData.businessOverview),
-        safe(creditData.businessLocation),
-        formatMySQLDate(creditData.businessStartDate),
-        safe(creditData.nearestLandmark),
-        safe(creditData.businessDescription),
-
-        toDecimalOrNull(creditData.currentStockValue),
-        toDecimalOrNull(creditData.startedBusinessWith),
-        safe(creditData.sourceOfFund),
-
-        toDecimalOrNull(creditData.principal),
-        toDecimalOrNull(creditData.rate),
-        toDecimalOrNull(creditData.loanTerm),
-        toDecimalOrNull(creditData.interest),
-
-        toDecimalOrNull(creditData.loanAmount),
-        toDecimalOrNull(creditData.monthlyInstallment),
-        toDecimalOrNull(creditData.grossMarginPercentage),
-        toDecimalOrNull(creditData.monthlySalesRevenue),
-        toDecimalOrNull(creditData.costOfGoodsOfSold),
-        toDecimalOrNull(creditData.grossProfit),
-        toDecimalOrNull(creditData.totalOperatingExpenses),
-        toDecimalOrNull(creditData.netBusinessProfit),
-
-        toDecimalOrNull(creditData.householdExpenses),
-        toDecimalOrNull(creditData.otherIncome),
-        toDecimalOrNull(creditData.householdSurplus),
-
-        safe(creditData.loanRecommendation),
-        toDecimalOrNull(creditData.payCapacity),
-
-        JSON.stringify(creditData.extraData || {}),
+        creditData?.isCreditworthy ? 1 : 0,
+        creditData?.isAbleToPay ? 1 : 0,
+        safe(creditData?.businessOverview),
+        safe(creditData?.businessLocation),
+        creditData?.businessStartDate ? formatMySQLDate(creditData.businessStartDate) : null,
+        safe(creditData?.nearestLandmark),
+        safe(creditData?.businessDescription),
+        toDecimalOrNull(creditData?.currentStockValue),
+        toDecimalOrNull(creditData?.startedBusinessWith),
+        safe(creditData?.sourceOfFund),
+        toDecimalOrNull(creditData?.principal),
+        toDecimalOrNull(creditData?.rate),
+        toDecimalOrNull(creditData?.loanTerm),
+        toDecimalOrNull(creditData?.interest),
+        toDecimalOrNull(creditData?.loanAmount),
+        toDecimalOrNull(creditData?.monthlyInstallment),
+        toDecimalOrNull(creditData?.grossMarginPercentage),
+        toDecimalOrNull(creditData?.monthlySalesRevenue),
+        toDecimalOrNull(creditData?.costOfGoodsSold),
+        toDecimalOrNull(creditData?.grossProfit),
+        toDecimalOrNull(creditData?.totalOperatingExpenses),
+        toDecimalOrNull(creditData?.netBusinessProfit),
+        toDecimalOrNull(creditData?.householdExpenses),
+        toDecimalOrNull(creditData?.otherIncome),
+        toDecimalOrNull(creditData?.householdSurplus),
+        toDecimalOrNull(creditData?.loanRecommendation),   // ← FIXED: convert empty string to NULL
+        toDecimalOrNull(creditData?.payCapacity),
+        JSON.stringify(creditData?.extraData || {}),
       ]
     );
 
-    // ===============================
-    // final decision
-    // ===============================
+    // Insert into loan_final_decisions
     await connection.execute(
-      `INSERT INTO loan_final_decisions (loan_id, comments, is_confirmed)
-       VALUES (?, ?, ?)`,
-      [
-        safe(loanId),
-        safe(finalDecision.comments),
-        finalDecision.confirmed ? 1 : 0,
-      ]
+      `INSERT INTO loan_final_decisions (loan_id, comments, is_confirmed) VALUES (?, ?, ?)`,
+      [safe(loanId), safe(finalDecision?.comments), finalDecision?.confirmed ? 1 : 0]
     );
 
-    // ===============================
-    // soft delete momo_details
-    // ===============================
+    // Soft delete momo_details
     await connection.execute(
       `UPDATE momo_details SET is_deleted = 1 WHERE kyc_code = ?`,
       [safe(loan.kyc_code)]
     );
 
     await connection.commit();
-
-    res.json({
-      message: "Loan evaluation saved",
+    res.status(200).json({
+      success: true,
+      message: "Loan evaluation saved successfully",
       loan_id: loanId,
     });
   } catch (error) {
     await connection.rollback();
-    console.error(error);
-
+    console.error("========== LOAN EVALUATION ERROR ==========");
+    console.error("SQL Message:", error.sqlMessage);
+    console.error("SQL Code:", error.code);
+    console.error("Full error:", error);
     res.status(500).json({
+      success: false,
       message: "Error saving loan evaluation",
-      error: error.message,
+      error: error.sqlMessage || error.message,
     });
   } finally {
     connection.release();
   }
 });
 
-
+// ===============================
 // Approve loan (update momo_details)
+// ===============================
 router.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
   const { loan_id } = req.params;
   db.query(`UPDATE momo_details SET loan_status = 'approved', approved_date = NOW() WHERE loan_id = ?`, [loan_id], (err, result) => {
@@ -306,7 +309,9 @@ router.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
   });
 });
 
+// ===============================
 // Reject loan (soft delete)
+// ===============================
 router.post("/loan/reject", (req, res) => {
   const { loan_id } = req.body;
   if (!loan_id) return res.status(400).json({ error: "loan_id is required" });
@@ -317,10 +322,9 @@ router.post("/loan/reject", (req, res) => {
   });
 });
 
-
-
-
-// 1. Verify customer (userId + kycCode)
+// ===============================
+// Verify customer (userId + kycCode)
+// ===============================
 router.post("/api/verify-customer", (req, res) => {
   let { userId, kycCode } = req.body;
   kycCode = kycCode?.trim();
@@ -330,8 +334,5 @@ router.post("/api/verify-customer", (req, res) => {
     res.json({ verified: true, customer: results[0] });
   });
 });
-
-
-
 
 export default router;
