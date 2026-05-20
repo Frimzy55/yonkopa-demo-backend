@@ -130,11 +130,61 @@ router.get("/api/loan-status/:userId", (req, res) => {
 // ===============================
 router.get("/loan-check/:userId", (req, res) => {
   const { userId } = req.params;
-  db.query("SELECT 1 FROM full_loan_kyc_view WHERE userId = ? LIMIT 1", [userId], (err, rows) => {
+  db.query("SELECT 1 FROM full_loan_kyc_view1 WHERE userId = ? LIMIT 1", [userId], (err, rows) => {
     if (err) return res.status(500).json({ exists: false });
     res.json({ exists: rows.length > 0 });
   });
 });
+
+
+
+router.get("/loan-rejected-check/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  const sql = `
+    SELECT loan_status
+    FROM momo_details
+    WHERE userId = ?
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+
+  db.query(sql, [userId], (err, rows) => {
+    if (err) return res.status(500).json({ rejected: false });
+
+    if (rows.length === 0) {
+      return res.json({ rejected: false });
+    }
+
+    return res.json({
+      rejected: rows[0].loan_status === "rejected",
+    });
+  });
+});
+/*router.get("/loan-check/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  const sql = `
+    SELECT loan_status
+    FROM full_loan_kyc_view
+    WHERE userId = ?
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+
+  db.query(sql, [userId], (err, rows) => {
+    if (err) return res.status(500).json({ exists: false });
+
+    if (rows.length === 0) {
+      return res.json({ exists: false, status: null });
+    }
+
+    return res.json({
+      exists: rows[0].loan_status !== "rejected",
+      status: rows[0].loan_status,
+    });
+  });
+});*/
 
 // ===============================
 // Get customer by kyc_code (for approved loans)
