@@ -37,7 +37,8 @@ router.post(
       const [kycRow] = await connection.query(`SELECT pid FROM personal_kyc WHERE userId = ? LIMIT 1`, [userId]);
       const pid = kycRow?.[0]?.pid;
       if (!pid) throw new Error("Failed to generate KYC ID");
-      const kycCode = String(pid).padStart(5, "0");
+      //const kycCode = String(pid).padStart(5, "0");
+      const kycCode = `kyc${String(pid).padStart(5, "0")}`;
       await connection.query(`UPDATE personal_kyc SET kycCode = ? WHERE pid = ?`, [kycCode, pid]);
 
       // Notification
