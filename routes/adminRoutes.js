@@ -52,10 +52,32 @@ router.get("/api/admin/approved-loans",  (req, res) => {
 });
 
 // Loan master view (evaluated loans)
-router.get("/api/admin/loan-full-view-evaluation", (req, res) => {
+/*router.get("/api/admin/loan-full-view-evaluation", (req, res) => {
   const query = `SELECT * FROM loan_master7 WHERE loan_eval_id IS NOT NULL AND loan_eval_id != ''`;
   db.query(query, (err, rows) => {
     if (err) return res.status(500).json({ message: "Database error", error: err.message });
+    res.json(rows);
+  });
+});*/
+
+
+
+router.get("/api/admin/loan-full-view-evaluation", (req, res) => {
+  const query = `
+    SELECT *
+    FROM loan_master7
+    WHERE loan_eval_id IS NOT NULL
+      AND loan_eval_id != ''
+    ORDER BY decision_date DESC
+  `;
+
+  db.query(query, (err, rows) => {
+    if (err)
+      return res.status(500).json({
+        message: "Database error",
+        error: err.message
+      });
+
     res.json(rows);
   });
 });
