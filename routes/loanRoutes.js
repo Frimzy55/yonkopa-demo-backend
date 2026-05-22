@@ -350,13 +350,138 @@ router.post("/api/loan/evaluate", async (req, res) => {
 // ===============================
 // Approve loan (update momo_details)
 // ===============================
-router.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
+/*router.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
   const { loan_id } = req.params;
   db.query(`UPDATE momo_details SET loan_status = 'approved', approved_date = NOW() WHERE loan_id = ?`, [loan_id], (err, result) => {
     if (err) return res.status(500).json({ success: false, message: "Database error" });
     if (result.affectedRows === 0) return res.status(404).json({ success: false, message: "Loan not found" });
     res.status(200).json({ success: true, message: "Loan approved successfully" });
   });
+});*/
+
+
+
+// ===============================
+// Approve loan + Generate Customer ID
+// ===============================
+
+router.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
+
+  const { loan_id } = req.params;
+
+  try {
+
+    // Get current loan
+    const [loanRows] = await db.promise().query(
+      `
+      SELECT *
+      FROM momo_details
+      WHERE loan_id = ?
+      LIMIT 1
+      `,
+      [loan_id]
+    );
+
+    // Loan not found
+    if (loanRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan not found",
+      });
+    }
+
+    const loan = loanRows[0];
+
+    // Prevent double approval
+    if (loan.loan_status === "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Loan already approved",
+      });
+    }
+
+    let customerId = null;
+
+    // =====================================
+    // CHECK IF KYC CODE ALREADY HAS CUSTOMER ID
+    // =====================================
+
+    const [existingCustomer] = await db.promise().query(
+      `
+      SELECT customer_id
+      FROM momo_details
+      WHERE kyc_code = ?
+      AND customer_id IS NOT NULL
+      LIMIT 1
+      `,
+      [loan.kyc_code]
+    );
+
+    // Reuse existing customer ID
+    if (existingCustomer.length > 0) {
+
+      customerId = existingCustomer[0].customer_id;
+
+    } else {
+
+      // =====================================
+      // GENERATE NEW CUSTOMER ID
+      // =====================================
+
+      const [latestCustomer] = await db.promise().query(
+        `
+        SELECT customer_id
+        FROM momo_details
+        WHERE customer_id IS NOT NULL
+        ORDER BY CAST(customer_id AS UNSIGNED) DESC
+        LIMIT 1
+        `
+      );
+
+      let nextNumber = 1;
+
+      if (latestCustomer.length > 0) {
+        nextNumber =
+          parseInt(latestCustomer[0].customer_id, 10) + 1;
+      }
+
+      // Format => 00001
+      customerId = String(nextNumber).padStart(5, "0");
+    }
+
+    // =====================================
+    // UPDATE LOAN
+    // =====================================
+
+    await db.promise().query(
+      `
+      UPDATE momo_details
+      SET
+        loan_status = 'approved',
+        approved_date = NOW(),
+        customer_id = ?
+      WHERE loan_id = ?
+      `,
+      [customerId, loan_id]
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Loan approved successfully",
+      customer_id: customerId,
+    });
+
+  } catch (error) {
+
+    console.error("Approve Loan Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Database error",
+    });
+
+  }
+
 });
 
 // ===============================

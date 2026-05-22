@@ -13,7 +13,7 @@ import loanRoutes from './routes/loanRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
-//mimport accountRoutes from './routes/accountRoutes.js';
+//import accountRoutes from './routes/accountRoutes.js';
 
 dotenv.config();
 

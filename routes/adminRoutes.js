@@ -53,7 +53,7 @@ router.get("/api/admin/approved-loans",  (req, res) => {
 
 // Loan master view (evaluated loans)
 router.get("/api/admin/loan-full-view-evaluation", (req, res) => {
-  const query = `SELECT * FROM loan_master4 WHERE loan_eval_id IS NOT NULL AND loan_eval_id != ''`;
+  const query = `SELECT * FROM loan_master5 WHERE loan_eval_id IS NOT NULL AND loan_eval_id != ''`;
   db.query(query, (err, rows) => {
     if (err) return res.status(500).json({ message: "Database error", error: err.message });
     res.json(rows);
@@ -70,13 +70,30 @@ router.get("/api/admin/loan1/:loan_id",  (req, res) => {
   });
 });
 
-// Approved loans summary (for admin)
-router.get("/api/admin/approved-loan",  (req, res) => {
-  const query = `SELECT applicant_fullName, mobileNumber, applicant_phone, kyc_loan_amount, approved_date FROM loan_master4 WHERE loan_status = 'approved' ORDER BY approved_date DESC`;
+
+
+
+
+
+router.get("/api/admin/approved-loan", (req, res) => {
+  const query = `
+    SELECT applicant_fullName,
+           mobileNumber,
+           applicant_phone,
+           kyc_loan_amount,
+           approved_date,
+           customer_id
+    FROM loan_master5
+    WHERE loan_status = 'approved'
+    ORDER BY approved_date DESC
+  `;
+
   db.query(query, (err, results) => {
     if (err) return res.status(500).json({ success: false, message: "Database error" });
     res.status(200).json(results);
   });
 });
+
+
 
 export default router;
