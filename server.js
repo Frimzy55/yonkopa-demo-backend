@@ -13,7 +13,7 @@ import loanRoutes from './routes/loanRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
-//import accountRoutes from './routes/accountRoutes.js';
+import accountRoutes from './routes/accountRoutes.js';
 
 dotenv.config();
 
@@ -49,7 +49,7 @@ app.use('/', loanRoutes);
 app.use('/', adminRoutes);
 app.use('/', notificationRoutes);
 app.use('/', taskRoutes);
-//app.use('/', accountRoutes);
+app.use('/', accountRoutes);
 
 // Start server
 app.listen(PORT, "0.0.0.0", () => {

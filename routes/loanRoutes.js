@@ -161,6 +161,46 @@ router.get("/loan-rejected-check/:userId", (req, res) => {
     });
   });
 });
+
+
+
+
+
+
+
+
+// ===============================
+// CHECK IF LAST LOAN IS APPROVED
+// ===============================
+router.get("/loan-approved-check/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  const sql = `
+    SELECT loan_status
+    FROM momo_details
+    WHERE userId = ?
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+
+  db.query(sql, [userId], (err, rows) => {
+    if (err) {
+      return res.status(500).json({
+        approved: false,
+      });
+    }
+
+    if (rows.length === 0) {
+      return res.json({
+        approved: false,
+      });
+    }
+
+    return res.json({
+      approved: rows[0].loan_status === "approved",
+    });
+  });
+});
 /*router.get("/loan-check/:userId", (req, res) => {
   const { userId } = req.params;
 
@@ -189,13 +229,52 @@ router.get("/loan-rejected-check/:userId", (req, res) => {
 // ===============================
 // Get customer by kyc_code (for approved loans)
 // ===============================
-router.get("/api/customer/:kyc_code", (req, res) => {
+/*router.get("/api/customer/:kyc_code", (req, res) => {
   const { kyc_code } = req.params;
   db.execute(`SELECT * FROM full_loan_kyc_view1 WHERE kyc_code = ? AND loan_status = 'approved' LIMIT 1`, [kyc_code], (err, rows) => {
     if (err || !rows.length) return res.status(404).json({ success: false, message: "KYC not approved or not found" });
     res.json({ success: true, customer: rows[0] });
   });
+});*/
+
+
+
+
+router.get("/api/customer/:customer_id", (req, res) => {
+  const { customer_id } = req.params;
+
+  const sql = `
+    SELECT * 
+    FROM loan_master7
+    WHERE customer_id = ?
+    AND loan_status = 'approved'
+    LIMIT 1
+  `;
+
+  db.execute(sql, [customer_id], (err, rows) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found or loan not approved",
+      });
+    }
+
+    res.json({
+      success: true,
+      customer: rows[0],
+    });
+  });
 });
+
+
 
 // ===============================
 // Loan evaluation (POST) – FIXED for numeric fields
