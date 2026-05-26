@@ -24,7 +24,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // CORS configuration
-app.use(cors({
+/*app.use(cors({
   origin: function(origin, callback) {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
@@ -35,7 +35,34 @@ app.use(cors({
     }
   },
   credentials: true
+}));*/
+
+
+
+
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // allow mobile apps / postman
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.log("❌ Blocked by CORS:", origin);
+    return callback(new Error("Not allowed by CORS"));
+  },
+
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+
+  allowedHeaders: ["Content-Type", "Authorization"],
+
+  credentials: true
 }));
+
+// IMPORTANT: handle preflight requests
+app.options("*", cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

@@ -15,7 +15,7 @@ const staffLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 30 mins
   max: 5,
 
-    skip: (req) => req.method === "OPTIONS", // 🔥 FIX
+    
 
   message: {
     success: false,
@@ -29,7 +29,7 @@ const loginLimiter = rateLimit({
 
   max: 5,
 
-    skip: (req) => req.method === "OPTIONS", // 🔥 FIX
+    
 
   message: {
     success: false,
