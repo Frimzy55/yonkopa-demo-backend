@@ -4,9 +4,39 @@ import jwt from 'jsonwebtoken';
 import { db } from '../config/db.js';
 import { getJwtSecret } from '../config/constants.js';
 import { authenticateToken } from '../middleware/auth.js';
+import rateLimit from "express-rate-limit";
 
 const router = express.Router();
 const JWT_SECRET = getJwtSecret();
+
+
+
+const staffLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 30 mins
+  max: 5,
+
+  message: {
+    success: false,
+    message: "Too many staff login attempts.",
+  },
+});
+
+
+const loginLimiter = rateLimit({
+  windowMs: 30 * 60 * 1000, // 15 minutes
+
+  max: 5,
+
+  message: {
+    success: false,
+    message: "Too many login attempts. Try again after 15 minutes.",
+  },
+
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+
 
 // Signup (customer)
 router.post('/signup', async (req, res) => {
@@ -103,7 +133,7 @@ router.post('/signup1', async (req, res) => {
 });
 
 // Customer login (users table)
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     let { identifier, password } = req.body;
     if (!identifier || !password) return res.status(400).json({ message: 'Identifier and password required' });
@@ -131,7 +161,7 @@ router.post('/login', async (req, res) => {
 });
 
 // Staff login (users1 table) with status check and logging
-router.post('/login2', async (req, res) => {
+router.post('/login2', staffLoginLimiter, async (req, res) => {
   try {
     let { identifier, password } = req.body;
     if (!identifier || !password) return res.status(400).json({ message: 'Identifier and password required' });
