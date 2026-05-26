@@ -184,3 +184,329 @@ router.post("/api/accounts/create", async (req, res) => {
 });
 
 export default router;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ======================================================
+// GET ALL ACCOUNTS
+// ======================================================
+router.get("/api/accounts", async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        id,
+        customer_id,
+        full_name,
+        branch,
+        phone_number,
+        relationship_officer,
+        account_type,
+        account_number
+      FROM accounts
+      ORDER BY id DESC
+    `);
+
+    // =========================================
+    // GROUP ACCOUNTS BY CUSTOMER
+    // =========================================
+    const groupedAccounts = {};
+
+    rows.forEach((row) => {
+      if (!groupedAccounts[row.customer_id]) {
+        groupedAccounts[row.customer_id] = {
+          id: row.id,
+          customerId: row.customer_id,
+          fullName: row.full_name,
+          branch: row.branch,
+          phoneNumber: row.phone_number,
+          relationshipOfficer: row.relationship_officer,
+          accountType: row.account_type,
+          linkedAccounts: [],
+        };
+      }
+
+      groupedAccounts[row.customer_id].linkedAccounts.push(
+        row.account_number
+      );
+    });
+
+    res.status(200).json({
+      success: true,
+      count: Object.keys(groupedAccounts).length,
+      accounts: Object.values(groupedAccounts),
+    });
+  } catch (error) {
+    console.error("GET ACCOUNTS ERROR:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch accounts",
+      error: error.message,
+    });
+  }
+});
+
+
+// ======================================================
+// GET SINGLE CUSTOMER ACCOUNT
+// ======================================================
+/*router.get("/api/accounts/:customerId", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+
+    const [rows] = await db.query(
+      `
+      SELECT
+        id,
+        customer_id,
+        full_name,
+        branch,
+        phone_number,
+        relationship_officer,
+        account_type,
+        account_number
+      FROM accounts
+      WHERE customer_id = ?
+    `,
+      [customerId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    const customer = {
+      id: rows[0].id,
+      customerId: rows[0].customer_id,
+      fullName: rows[0].full_name,
+      branch: rows[0].branch,
+      phoneNumber: rows[0].phone_number,
+      relationshipOfficer:
+        rows[0].relationship_officer,
+      accountType: rows[0].account_type,
+      linkedAccounts: rows.map(
+        (row) => row.account_number
+      ),
+    };
+
+    res.status(200).json({
+      success: true,
+      account: customer,
+    });
+  } catch (error) {
+    console.error("GET SINGLE ACCOUNT ERROR:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch customer",
+      error: error.message,
+    });
+  }
+});
+
+
+// ======================================================
+// UPDATE ACCOUNT
+// ======================================================
+router.put(
+  "/api/accounts/:customerId",
+  async (req, res) => {
+    try {
+      const { customerId } = req.params;
+
+      const {
+        fullName,
+        branch,
+        phoneNumber,
+        relationshipOfficer,
+        accountType,
+      } = req.body;
+
+      // =========================================
+      // VALIDATION
+      // =========================================
+      if (!fullName) {
+        return res.status(400).json({
+          success: false,
+          message: "Full name is required",
+        });
+      }
+
+      if (!branch) {
+        return res.status(400).json({
+          success: false,
+          message: "Branch is required",
+        });
+      }
+
+      if (!phoneNumber) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number is required",
+        });
+      }
+
+      if (!relationshipOfficer) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Relationship officer is required",
+        });
+      }
+
+      if (!accountType) {
+        return res.status(400).json({
+          success: false,
+          message: "Account type is required",
+        });
+      }
+
+      // =========================================
+      // UPDATE CUSTOMER
+      // =========================================
+      const [result] = await db.query(
+        `
+        UPDATE accounts
+        SET
+          full_name = ?,
+          branch = ?,
+          phone_number = ?,
+          relationship_officer = ?,
+          account_type = ?
+        WHERE customer_id = ?
+      `,
+        [
+          fullName,
+          branch,
+          phoneNumber,
+          relationshipOfficer,
+          accountType,
+          customerId,
+        ]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Customer not found",
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Account updated successfully",
+      });
+    } catch (error) {
+      console.error("UPDATE ACCOUNT ERROR:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to update account",
+        error: error.message,
+      });
+    }
+  }
+);
+
+
+// ======================================================
+// DELETE ACCOUNT
+// ======================================================
+router.delete(
+  "/api/accounts/:customerId",
+  async (req, res) => {
+    try {
+      const { customerId } = req.params;
+
+      const [result] = await db.query(
+        `
+        DELETE FROM accounts
+        WHERE customer_id = ?
+      `,
+        [customerId]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Customer not found",
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Account deleted successfully",
+      });
+    } catch (error) {
+      console.error("DELETE ACCOUNT ERROR:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to delete account",
+        error: error.message,
+      });
+    }
+  }
+);
+*/

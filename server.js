@@ -14,6 +14,7 @@ import adminRoutes from "./routes/adminRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import taskRoutes from "./routes/taskRoutes.js";
 import accountRoutes from "./routes/accountRoutes.js";
+import enquiryRoutes from "./routes/enquiryRoutes.js";
 
 dotenv.config();
 
@@ -30,34 +31,26 @@ const PORT = process.env.PORT || 5000;
  */
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow Postman / mobile apps
-    if (!origin) return callback(null, true);
+    if (!origin) return callback(null, true); // Postman/mobile apps
 
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
     console.log("❌ Blocked by CORS:", origin);
-
-    // IMPORTANT: block unknown origins properly
     return callback(new Error("Not allowed by CORS"));
   },
-
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-
   allowedHeaders: ["Content-Type", "Authorization"],
-
   credentials: true,
 };
 
 /**
  * =========================
- * MIDDLEWARE ORDER (IMPORTANT)
+ * MIDDLEWARE
  * =========================
  */
 app.use(cors(corsOptions));
-
-// JSON parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -66,24 +59,26 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 /**
  * =========================
- * GLOBAL PRE-FLIGHT HANDLER
- * (SAFE VERSION - NO CRASH)
+ * OPTIONAL DEV LOGGER ONLY
+ * (Prevents spam in production)
+ * =========================
+ */
+if (process.env.NODE_ENV === "development") {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
+}
+
+/**
+ * =========================
+ * PRE-FLIGHT HANDLER
  * =========================
  */
 app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
   }
-  next();
-});
-
-/**
- * =========================
- * REQUEST LOGGER (DEBUG)
- * =========================
- */
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
   next();
 });
 
@@ -100,6 +95,7 @@ app.use("/", adminRoutes);
 app.use("/", notificationRoutes);
 app.use("/", taskRoutes);
 app.use("/", accountRoutes);
+app.use("/", enquiryRoutes);
 
 /**
  * =========================
