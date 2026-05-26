@@ -15,6 +15,8 @@ const staffLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 30 mins
   max: 5,
 
+    skip: (req) => req.method === "OPTIONS", // 🔥 FIX
+
   message: {
     success: false,
     message: "Too many staff login attempts.",
@@ -26,6 +28,8 @@ const loginLimiter = rateLimit({
   windowMs: 30 * 60 * 1000, // 15 minutes
 
   max: 5,
+
+    skip: (req) => req.method === "OPTIONS", // 🔥 FIX
 
   message: {
     success: false,

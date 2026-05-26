@@ -1,8 +1,7 @@
 // Allowed origins for CORS
 export const allowedOrigins = [
   "http://localhost:3000",
-  "https://yonkopa-frontend.vercel.app",
-  "https://yonkopa-frontend-app.vercel.app",
+  "https://www.yonkopamicrocredit.com",
   "https://yonkopamicrocredit.com",
   "https://207.154.233.29"
 ];
