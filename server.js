@@ -1,19 +1,19 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { allowedOrigins } from './config/constants.js';
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import { allowedOrigins } from "./config/constants.js";
 
-// Import routes
-import authRoutes from './routes/authRoutes.js';
-import userRoutes from './routes/userRoutes.js';
-import kycRoutes from './routes/kycRoutes.js';
-import loanRoutes from './routes/loanRoutes.js';
-import adminRoutes from './routes/adminRoutes.js';
-import notificationRoutes from './routes/notificationRoutes.js';
-import taskRoutes from './routes/taskRoutes.js';
-import accountRoutes from './routes/accountRoutes.js';
+// Routes
+import authRoutes from "./routes/authRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import kycRoutes from "./routes/kycRoutes.js";
+import loanRoutes from "./routes/loanRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
+import taskRoutes from "./routes/taskRoutes.js";
+import accountRoutes from "./routes/accountRoutes.js";
 
 dotenv.config();
 
@@ -23,27 +23,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS configuration
-/*app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
-      return callback(null, true);
-    } else {
-      console.log("Blocked by CORS:", origin);
-      return callback(null, true); // Allow anyway for now, adjust as needed
-    }
-  },
-  credentials: true
-}));*/
-
-
-
-
-
-app.use(cors({
+/**
+ * =========================
+ * CORS CONFIG
+ * =========================
+ */
+const corsOptions = {
   origin: function (origin, callback) {
-    // allow mobile apps / postman
+    // Allow Postman / mobile apps
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
@@ -51,6 +38,8 @@ app.use(cors({
     }
 
     console.log("❌ Blocked by CORS:", origin);
+
+    // IMPORTANT: block unknown origins properly
     return callback(new Error("Not allowed by CORS"));
   },
 
@@ -58,27 +47,86 @@ app.use(cors({
 
   allowedHeaders: ["Content-Type", "Authorization"],
 
-  credentials: true
-}));
+  credentials: true,
+};
 
-// IMPORTANT: handle preflight requests
-app.options("*", cors());
+/**
+ * =========================
+ * MIDDLEWARE ORDER (IMPORTANT)
+ * =========================
+ */
+app.use(cors(corsOptions));
 
+// JSON parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Register routes
-app.use('/', authRoutes);
-app.use('/', userRoutes);
-app.use('/', kycRoutes);
-app.use('/', loanRoutes);
-app.use('/', adminRoutes);
-app.use('/', notificationRoutes);
-app.use('/', taskRoutes);
-app.use('/', accountRoutes);
+/**
+ * =========================
+ * GLOBAL PRE-FLIGHT HANDLER
+ * (SAFE VERSION - NO CRASH)
+ * =========================
+ */
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
-// Start server
+/**
+ * =========================
+ * REQUEST LOGGER (DEBUG)
+ * =========================
+ */
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
+
+/**
+ * =========================
+ * ROUTES
+ * =========================
+ */
+app.use("/", authRoutes);
+app.use("/", userRoutes);
+app.use("/", kycRoutes);
+app.use("/", loanRoutes);
+app.use("/", adminRoutes);
+app.use("/", notificationRoutes);
+app.use("/", taskRoutes);
+app.use("/", accountRoutes);
+
+/**
+ * =========================
+ * GLOBAL ERROR HANDLER
+ * =========================
+ */
+app.use((err, req, res, next) => {
+  console.error("🔥 ERROR:", err.message);
+
+  if (err.message === "Not allowed by CORS") {
+    return res.status(403).json({
+      success: false,
+      message: "Blocked by CORS policy",
+    });
+  }
+
+  res.status(500).json({
+    success: false,
+    message: "Internal server error",
+  });
+});
+
+/**
+ * =========================
+ * START SERVER
+ * =========================
+ */
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
