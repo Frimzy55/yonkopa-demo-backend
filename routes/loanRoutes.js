@@ -116,7 +116,7 @@ router.post(
 // ===============================
 // Get loan status for user
 // ===============================
-router.get("/api/loan-status/:userId", (req, res) => {
+/*router.get("/api/loan-status/:userId", (req, res) => {
   const { userId } = req.params;
   const sql = `SELECT loan_status FROM momo_details WHERE userId = ? ORDER BY created_at DESC LIMIT 1`;
   db.query(sql, [userId], (err, results) => {
@@ -124,7 +124,39 @@ router.get("/api/loan-status/:userId", (req, res) => {
     res.json({ status: results[0].loan_status });
   });
 });
+*/
 
+router.get("/api/loan-status/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  const sql = `
+    SELECT loan_status, loan_id
+    FROM momo_details
+    WHERE userId = ?
+    ORDER BY id DESC
+    LIMIT 1
+  `;
+
+  db.query(sql, [userId], (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({
+        status: "error",
+      });
+    }
+
+    if (results.length === 0) {
+      return res.json({
+        status: "No Loan",
+      });
+    }
+
+    return res.json({
+      status: results[0].loan_status,
+      loan_id: results[0].loan_id,
+    });
+  });
+});
 // ===============================
 // Check if user already applied for loan
 // ===============================
@@ -574,6 +606,52 @@ router.post("/loan/reject", (req, res) => {
     if (result.affectedRows === 0) return res.status(404).json({ error: "Loan not found" });
     res.json({ message: "Loan rejected and soft deleted successfully", loan_id });
   });
+});
+
+
+
+
+
+
+router.post("/loan/reject1", (req, res) => {
+  console.log("Reject request:", req.body);
+
+  const { loan_id } = req.body;
+
+  if (!loan_id) {
+    return res.status(400).json({
+      error: "loan_id is required",
+    });
+  }
+
+  db.query(
+    `UPDATE momo_details
+     SET loan_status = 'rejected',
+         is_deleted = 1
+     WHERE loan_id = ?`,
+    [loan_id],
+    (err, result) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({
+          error: "Database error",
+        });
+      }
+
+      console.log(result);
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          error: "Loan not found",
+        });
+      }
+
+      res.json({
+        message: "Loan rejected successfully",
+        loan_id,
+      });
+    }
+  );
 });
 
 // ===============================
