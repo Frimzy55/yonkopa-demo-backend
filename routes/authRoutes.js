@@ -164,8 +164,11 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 });
 
+
+
+
 // Staff login (users1 table) with status check and logging
-/*router.post('/login2', staffLoginLimiter, async (req, res) => {
+router.post('/login2', staffLoginLimiter, async (req, res) => {
   try {
     let { identifier, password } = req.body;
     if (!identifier || !password) return res.status(400).json({ message: 'Identifier and password required' });
@@ -199,7 +202,78 @@ router.post('/login', loginLimiter, async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
-*/
+
+
+
+
+
+/*router.post('/login', loginLimiter, async (req, res) => {
+  try {
+    let { identifier, password } = req.body;
+
+    if (!identifier || !password)
+      return res.status(400).json({ message: 'Identifier and password required' });
+
+    identifier = identifier.trim();
+    const isEmail = identifier.includes('@');
+
+    if (isEmail) {
+      identifier = identifier.toLowerCase();
+    }
+
+    let phone = null;
+
+    if (!isEmail) {
+      phone = identifier.replace(/\D/g, '');
+      if (phone.startsWith('233') && phone.length === 12) {
+        phone = '0' + phone.slice(3);
+      }
+    }
+
+    const sql = isEmail
+      ? 'SELECT * FROM users WHERE LOWER(email) = ?'
+      : 'SELECT * FROM users WHERE phone = ?';
+
+    db.query(sql, [isEmail ? identifier : phone], async (err, results) => {
+      if (err) return res.status(500).json({ message: 'Server error' });
+
+      if (results.length === 0)
+        return res.status(404).json({ message: 'User not found' });
+
+      const user = results[0];
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch)
+        return res.status(401).json({ message: 'Invalid credentials' });
+
+      // ✅ USE UUID HERE
+      const token = jwt.sign(
+        {
+          user_uuid: user.user_uuid,
+          email: user.email,
+          role: user.role
+        },
+        JWT_SECRET,
+        { expiresIn: '2h' }
+      );
+
+      res.json({
+        message: 'Login successful',
+        token,
+        user: {
+          user_uuid: user.user_uuid,   // ✅ IMPORTANT
+          fullName: user.full_name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role
+        }
+      });
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});*/
 
 
 
@@ -207,7 +281,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
 
 // Staff login (users1 table) with status check and logging
-router.post('/login2', staffLoginLimiter, async (req, res) => {
+/*router.post('/login2', staffLoginLimiter, async (req, res) => {
   try {
     let { identifier, password } = req.body;
 
@@ -308,7 +382,122 @@ router.post('/login2', staffLoginLimiter, async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+*/
 
+
+
+
+
+/*router.post('/login2', staffLoginLimiter, async (req, res) => {
+  try {
+    let { identifier, password } = req.body;
+
+    if (!identifier || !password) {
+      return res.status(400).json({ message: 'Identifier and password required' });
+    }
+
+    identifier = identifier.trim();
+    const isEmail = identifier.includes('@');
+
+    let phone = null;
+    let username = null;
+
+    if (isEmail) {
+      identifier = identifier.toLowerCase();
+    } else {
+      phone = identifier.replace(/\D/g, '');
+
+      if (phone.startsWith('233') && phone.length === 12) {
+        phone = '0' + phone.slice(3);
+      }
+
+      username = identifier.toLowerCase();
+    }
+
+    let sql;
+    let params;
+
+    if (isEmail) {
+      sql = 'SELECT * FROM users1 WHERE LOWER(email) = ?';
+      params = [identifier];
+    } else {
+      sql = `
+        SELECT * FROM users1 
+        WHERE phone = ? 
+        OR LOWER(username) = ?
+      `;
+      params = [phone, username];
+    }
+
+    db.query(sql, params, async (err, results) => {
+      if (err) return res.status(500).json({ message: 'Server error' });
+
+      if (results.length === 0) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      const user = results[0];
+
+      // ❌ inactive check
+      if (user.status === 'inactive') {
+        db.query(
+          `INSERT INTO login_logs (user_uuid, ip_address, user_agent, status)
+           VALUES (?, ?, ?, 'failed')`,
+          [user.user_uuid, req.ip, req.headers['user-agent']]
+        );
+
+        return res.status(403).json({ message: 'Your account has been deactivated' });
+      }
+
+      const isMatch = await bcrypt.compare(password, user.password);
+
+      if (!isMatch) {
+        db.query(
+          `INSERT INTO login_logs (user_uuid, ip_address, user_agent, status)
+           VALUES (?, ?, ?, 'failed')`,
+          [user.user_uuid, req.ip, req.headers['user-agent']]
+        );
+
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      // 🔐 JWT using UUID
+      const token = jwt.sign(
+        {
+          user_uuid: user.user_uuid,
+          email: user.email,
+          role: user.role
+        },
+        JWT_SECRET,
+        { expiresIn: '2h' }
+      );
+
+      // ✅ success log
+      db.query(
+        `INSERT INTO login_logs (user_uuid, ip_address, user_agent, status)
+         VALUES (?, ?, ?, 'success')`,
+        [user.user_uuid, req.ip, req.headers['user-agent']]
+      );
+
+      res.json({
+        message: 'Login successful',
+        token,
+        user: {
+          user_uuid: user.user_uuid,
+          fullName: user.full_name,
+          username: user.username,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          status: user.status
+        }
+      });
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});*/
 
 
 

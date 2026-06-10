@@ -15,6 +15,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import taskRoutes from "./routes/taskRoutes.js";
 import accountRoutes from "./routes/accountRoutes.js";
 import enquiryRoutes from "./routes/enquiryRoutes.js";
+import glAccountRoutes from "./routes/glAccountsRoutes.js";
 
 dotenv.config();
 
@@ -96,6 +97,7 @@ app.use("/", notificationRoutes);
 app.use("/", taskRoutes);
 app.use("/", accountRoutes);
 app.use("/", enquiryRoutes);
+app.use("/", glAccountRoutes);
 
 /**
  * =========================
