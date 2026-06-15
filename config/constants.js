@@ -1,6 +1,7 @@
 // Allowed origins for CORS
 export const allowedOrigins = [
-  "http://localhost:3000",
+  "http://localhost:3001",
+    "http://localhost:3000",
   "https://www.yonkopamicrocredit.com",
   "https://yonkopamicrocredit.com",
   "https://207.154.233.29"

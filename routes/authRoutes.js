@@ -12,8 +12,8 @@ const JWT_SECRET = getJwtSecret();
 
 
 const staffLoginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 30 mins
-  max: 5,
+  windowMs: 1 * 60 * 1000, // 30 mins
+  max: 15,
 
     
 
@@ -167,43 +167,121 @@ router.post('/login', loginLimiter, async (req, res) => {
 
 
 
-// Staff login (users1 table) with status check and logging
 router.post('/login2', staffLoginLimiter, async (req, res) => {
   try {
     let { identifier, password } = req.body;
-    if (!identifier || !password) return res.status(400).json({ message: 'Identifier and password required' });
+
+    if (!identifier || !password)
+      return res.status(400).json({ message: 'Identifier and password required' });
+
     identifier = identifier.trim();
+
     const isEmail = identifier.includes('@');
-    if (isEmail) identifier = identifier.toLowerCase();
     let phone = null;
-    if (!isEmail) {
-      phone = identifier.replace(/\D/g, '');
-      if (phone.startsWith('233') && phone.length === 12) phone = '0' + phone.slice(3);
+    let username = null;
+
+    if (isEmail) {
+      identifier = identifier.toLowerCase();
+    } else {
+      const digits = identifier.replace(/\D/g, '');
+
+      if (digits.length >= 10) {
+        phone = digits;
+
+        if (phone.startsWith('233') && phone.length === 12) {
+          phone = '0' + phone.slice(3);
+        }
+      } else {
+        username = identifier.toLowerCase();
+      }
     }
-    const sql = isEmail ? 'SELECT * FROM users1 WHERE LOWER(email) = ?' : 'SELECT * FROM users1 WHERE phone = ?';
-    db.query(sql, [isEmail ? identifier : phone], async (err, results) => {
+
+    let sql;
+    let params;
+
+    if (isEmail) {
+      sql = 'SELECT * FROM users1 WHERE LOWER(email) = ?';
+      params = [identifier];
+    } 
+    else if (phone) {
+      sql = 'SELECT * FROM users1 WHERE phone = ?';
+      params = [phone];
+    } 
+    else {
+      sql = 'SELECT * FROM users1 WHERE LOWER(username) = ?';
+      params = [username];
+    }
+
+    db.query(sql, params, async (err, results) => {
       if (err) return res.status(500).json({ message: 'Server error' });
-      if (results.length === 0) return res.status(404).json({ message: 'User not found' });
+
+      if (results.length === 0)
+        return res.status(404).json({ message: 'User not found' });
+
       const user = results[0];
+
+      // status check
       if (user.status === 'inactive') {
-        db.query(`INSERT INTO login_logs (userId, ip_address, user_agent, status) VALUES (?, ?, ?, 'failed')`, [user.userId, req.ip, req.headers['user-agent']]);
-        return res.status(403).json({ message: 'Your account has been deactivated' });
+        db.query(
+          `INSERT INTO login_logs (userId, ip_address, user_agent, status)
+           VALUES (?, ?, ?, 'failed')`,
+          [user.userId, req.ip, req.headers['user-agent']]
+        );
+
+        return res.status(403).json({
+          message: 'Your account has been deactivated'
+        });
       }
+
       const isMatch = await bcrypt.compare(password, user.password);
+
       if (!isMatch) {
-        db.query(`INSERT INTO login_logs (userId, ip_address, user_agent, status) VALUES (?, ?, ?, 'failed')`, [user.userId, req.ip, req.headers['user-agent']]);
-        return res.status(401).json({ message: 'Invalid credentials' });
+        db.query(
+          `INSERT INTO login_logs (userId, ip_address, user_agent, status)
+           VALUES (?, ?, ?, 'failed')`,
+          [user.userId, req.ip, req.headers['user-agent']]
+        );
+
+        return res.status(401).json({
+          message: 'Invalid credentials'
+        });
       }
-      const token = jwt.sign({ userId: user.userId, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '2h' });
-      db.query(`INSERT INTO login_logs (userId, ip_address, user_agent, status) VALUES (?, ?, ?, 'success')`, [user.userId, req.ip, req.headers['user-agent']]);
-      res.json({ message: 'Login successful', token, user: { userId: user.userId, fullName: user.full_name, username: user.username, email: user.email, phone: user.phone, role: user.role, status: user.status } });
+
+      const token = jwt.sign(
+        {
+          userId: user.userId,
+          email: user.email,
+          role: user.role
+        },
+        JWT_SECRET,
+        { expiresIn: '2h' }
+      );
+
+      db.query(
+        `INSERT INTO login_logs (userId, ip_address, user_agent, status)
+         VALUES (?, ?, ?, 'success')`,
+        [user.userId, req.ip, req.headers['user-agent']]
+      );
+
+      res.json({
+        message: 'Login successful',
+        token,
+        user: {
+          userId: user.userId,
+          fullName: user.full_name,
+          username: user.username,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          status: user.status
+        }
+      });
     });
+
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
 });
-
-
 
 
 
