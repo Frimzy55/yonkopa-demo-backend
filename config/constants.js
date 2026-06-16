@@ -4,7 +4,8 @@ export const allowedOrigins = [
     "http://localhost:3000",
   "https://www.yonkopamicrocredit.com",
   "https://yonkopamicrocredit.com",
-  "https://207.154.233.29"
+  "https://207.154.233.29",
+   "https://demo.yonkopamicrocredit.com"
 ];
 
 // JWT secret based on environment
