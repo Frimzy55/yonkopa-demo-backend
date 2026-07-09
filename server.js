@@ -16,6 +16,7 @@ import taskRoutes from "./routes/taskRoutes.js";
 import accountRoutes from "./routes/accountRoutes.js";
 import enquiryRoutes from "./routes/enquiryRoutes.js";
 import glAccountRoutes from "./routes/glAccountsRoutes.js";
+import tellerRoutes from "./routes/tellerRoutes.js";
 
 dotenv.config();
 
@@ -98,6 +99,7 @@ app.use("/", taskRoutes);
 app.use("/", accountRoutes);
 app.use("/", enquiryRoutes);
 app.use("/", glAccountRoutes);
+app.use("/api/teller", tellerRoutes);
 
 /**
  * =========================
