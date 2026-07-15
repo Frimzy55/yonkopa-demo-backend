@@ -3,10 +3,48 @@ import { db } from "../config/db.js";
 
 const router = express.Router();
 
-// CREATE GL ACCOUNT
+// Mapping: accountType -> starting number for the code
+const TYPE_START_NUMBER = {
+  Asset: 1001,
+  Liability: 2001,
+  Equity: 3001,
+  Revenue: 4001,
+  Expense: 5001
+};
+
+// Helper to generate the next account code for a given type
+const generateAccountCode = (accountType, callback) => {
+  // Check if the type is valid
+  if (!TYPE_START_NUMBER[accountType]) {
+    return callback(new Error("Invalid account type"), null);
+  }
+
+  // Query the maximum numeric part of the code for this type
+  const sql = `
+    SELECT MAX(CAST(SUBSTRING(accountCode, 4) AS UNSIGNED)) as maxNum
+    FROM gl_accounts
+    WHERE accountType = ?
+  `;
+  db.execute(sql, [accountType], (err, rows) => {
+    if (err) return callback(err, null);
+
+    let nextNumber;
+    const maxNum = rows[0]?.maxNum;
+    if (maxNum === null) {
+      // No existing code for this type → start with the base number
+      nextNumber = TYPE_START_NUMBER[accountType];
+    } else {
+      // Increment the highest existing number
+      nextNumber = maxNum + 1;
+    }
+    const accountCode = `GHS${nextNumber}`;
+    callback(null, accountCode);
+  });
+};
+
+// CREATE GL ACCOUNT (auto‑generate accountCode)
 router.post("/api/gl-accounts", (req, res) => {
   const {
-    accountCode,
     accountName,
     accountType,
     category,
@@ -17,52 +55,72 @@ router.post("/api/gl-accounts", (req, res) => {
     isSubAccount
   } = req.body;
 
-  const sql = `
-    INSERT INTO gl_accounts (
-      accountCode,
-      accountName,
-      accountType,
-      category,
-      normalBalance,
-      description,
-      status,
-      parentAccount,
-      isSubAccount
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
+  // Validate accountType
+  if (!TYPE_START_NUMBER[accountType]) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid account type"
+    });
+  }
 
-  db.execute(
-    sql,
-    [
-      accountCode,
-      accountName,
-      accountType,
-      category,
-      normalBalance,
-      description,
-      status,
-      parentAccount,
-      isSubAccount
-    ],
-    (err, result) => {
-      if (err) {
-        console.error("GL Account Create Error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Error creating GL Account"
-        });
-      }
-
-      res.status(201).json({
-        success: true,
-        message: "GL Account created successfully"
+  // Generate the account code
+  generateAccountCode(accountType, (err, accountCode) => {
+    if (err) {
+      console.error("Code generation error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to generate account code"
       });
     }
-  );
+
+    const sql = `
+      INSERT INTO gl_accounts (
+        accountCode,
+        accountName,
+        accountType,
+        category,
+        normalBalance,
+        description,
+        status,
+        parentAccount,
+        isSubAccount
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    db.execute(
+      sql,
+      [
+        accountCode,
+        accountName,
+        accountType,
+        category || null,
+        normalBalance,
+        description || null,
+        status || 'Active',
+        parentAccount || null,
+        isSubAccount ? 1 : 0
+      ],
+      (err, result) => {
+        if (err) {
+          console.error("GL Account Create Error:", err);
+          return res.status(500).json({
+            success: false,
+            message: "Error creating GL Account"
+          });
+        }
+
+        res.status(201).json({
+          success: true,
+          message: "GL Account created successfully",
+          accountCode   // optionally return the generated code
+        });
+      }
+    );
+  });
 });
 
-// GET ALL GL ACCOUNTS
+// GET ALL GL ACCOUNTS (unchanged)
 router.get("/api/gl-accounts", (req, res) => {
   const sql = `
     SELECT *
@@ -83,12 +141,11 @@ router.get("/api/gl-accounts", (req, res) => {
   });
 });
 
-// UPDATE GL ACCOUNT
+// UPDATE GL ACCOUNT (do NOT allow changing accountCode)
 router.put("/api/gl-accounts/:id", (req, res) => {
   const { id } = req.params;
 
   const {
-    accountCode,
     accountName,
     accountType,
     category,
@@ -99,10 +156,11 @@ router.put("/api/gl-accounts/:id", (req, res) => {
     isSubAccount
   } = req.body;
 
+  // account Code is NOT updated – it stays as originally generated
+
   const sql = `
     UPDATE gl_accounts
     SET
-      accountCode = ?,
       accountName = ?,
       accountType = ?,
       category = ?,
@@ -117,15 +175,14 @@ router.put("/api/gl-accounts/:id", (req, res) => {
   db.execute(
     sql,
     [
-      accountCode,
       accountName,
       accountType,
-      category,
+      category || null,
       normalBalance,
-      description,
-      status,
-      parentAccount,
-      isSubAccount,
+      description || null,
+      status || 'Active',
+      parentAccount || null,
+      isSubAccount ? 1 : 0,
       id
     ],
     (err, result) => {
