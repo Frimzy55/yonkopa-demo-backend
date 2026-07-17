@@ -10,7 +10,7 @@ router.get('/admin/dashboard', authenticateToken, authorizeRoles('admin'), (req,
 });
 
 // Loan management route (accessible by loan_officer, supervisor, manager, admin)
-router.get('/loan/management', authenticateToken, authorizeRoles('loan_officer', 'supervisor', 'manager', 'admin'), (req, res) => {
+router.get('/loan/management', authenticateToken, authorizeRoles('loan_officer', 'supervisor', 'manager', 'admin', 'master_till'), (req, res) => {
   res.json({ message: 'Loan management area accessed successfully.' });
 });
 
