@@ -230,4 +230,4 @@ const validateStep = (step) => {
   };
 };
 
-module.exports = { validateStep };
+module.exports = { validateStep }

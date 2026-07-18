@@ -221,6 +221,63 @@ router.get('/', (req, res) => {
   });
 });
 
+
+
+
+
+
+
+
+
+
+
+
+router.get('/loan-account', (req, res) => {
+  const { customerId } = req.query;
+
+  if (!customerId) {
+    return res.status(400).json({ error: 'customerId query parameter is required' });
+  }
+
+  db.getConnection((err, connection) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Database connection failed' });
+    }
+
+    const sql = `
+      SELECT
+        customer_id,
+        account_number,
+        applicant_fullName,
+        account_name,
+        account_type,
+        account_balance,
+        account_currency,
+        account_status,
+        avatar                    -- added avatar column
+      FROM loan_master_account
+      WHERE customer_id = ?
+      LIMIT 1
+    `;
+
+    connection.query(sql, [customerId], (err, rows) => {
+      connection.release();
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'No loan account found for this customer' });
+      }
+
+      // The response now includes avatar
+      res.json(rows[0]);
+    });
+  });
+});
+
 // ------------------------------
 // GET /api/tills/:id  - Fetch a single till by ID
 // ------------------------------
@@ -255,6 +312,14 @@ router.get('/:id', (req, res) => {
     );
   });
 });
+
+
+
+
+
+
+
+
 
 
 
