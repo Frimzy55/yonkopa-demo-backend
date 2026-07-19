@@ -22,7 +22,7 @@ router.post("/api/accounts/create", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Customer ID is required",
-      });
+      });        
     }
 
     if (!account_type) {
