@@ -510,3 +510,131 @@ router.delete(
   }
 );
 */
+
+// GET /api/statements/account/:accountNumber
+router.get('/statements/account/:accountNumber', async (req, res) => {
+  const { accountNumber } = req.params;
+
+  if (!accountNumber) {
+    return res.status(400).json({ success: false, message: 'Account number is required' });
+  }
+
+  const connection = await db.promise().getConnection();
+
+  try {
+    // Query the customer account table (loan_master_account or customer_accounts_v2)
+    // We'll use loan_master_account as it has full name and type
+    const [rows] = await connection.execute(
+      `
+      SELECT 
+        account_number AS accountNumber,
+        applicant_fullName AS accountName,
+        account_type AS accountType,
+        account_balance AS currentBalance,
+        account_currency AS currency,
+        account_status AS status
+      FROM loan_master_account
+      WHERE account_number = ?
+      LIMIT 1
+      `,
+      [accountNumber]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Account not found' });
+    }
+
+    // Optionally compute opening balance (balance before start date) – frontend handles that separately
+    // We'll just return the current balance; frontend can compute opening balance by fetching
+    // first transaction balance or using separate endpoint.
+
+    connection.release();
+
+    res.status(200).json({
+      success: true,
+      data: rows[0]
+    });
+  } catch (err) {
+    if (connection) connection.release();
+    console.error('Account fetch error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+
+
+
+
+router.get('/statements/transactions', async (req, res) => {
+  const { accountNumber, startDate, endDate, type } = req.query;
+
+  if (!accountNumber) {
+    return res.status(400).json({ success: false, message: 'Account number is required' });
+  }
+
+  if (!startDate || !endDate) {
+    return res.status(400).json({ success: false, message: 'Start date and end date are required' });
+  }
+
+  if (type && !['deposit', 'withdrawal'].includes(type)) {
+    return res.status(400).json({ success: false, message: 'Invalid transaction type' });
+  }
+
+  const connection = await db.promise().getConnection();
+
+  try {
+    // Use DATE() to ignore time part
+    let sql = `
+      SELECT 
+        id,
+        deposit_id,
+        transaction_date,
+        account_name,
+        account_number,
+        narration,
+        description,
+        debit,
+        credit,
+        balance,
+        currency,
+        created_at
+      FROM deposit_to_and_from_transaction
+      WHERE account_number = ?
+        AND DATE(transaction_date) BETWEEN ? AND ?
+    `;
+
+    const params = [accountNumber, startDate, endDate];
+
+    if (type === 'deposit') {
+      sql += ' AND credit > 0';
+    } else if (type === 'withdrawal') {
+      sql += ' AND debit > 0';
+    }
+
+    sql += ' ORDER BY transaction_date ASC, id ASC';
+
+    const [rows] = await connection.execute(sql, params);
+    connection.release();
+
+    // Also compute the opening balance (balance before startDate) to send to frontend
+    // (Optional) frontend currently uses the first transaction's balance as opening balance
+
+    res.status(200).json({
+      success: true,
+      data: rows
+    });
+  } catch (err) {
+    if (connection) connection.release();
+    console.error('Transactions fetch error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+
+
+
+
+
+
+
+
