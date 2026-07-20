@@ -82,44 +82,155 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// Staff signup (users1 table)
 router.post('/signup2', async (req, res) => {
-  const { fullName, full_name, username, identifier, password, confirmPassword, role } = req.body;
+  const {
+    fullName,
+    full_name,
+    username,
+    identifier,
+    password,
+    confirmPassword,
+    role
+  } = req.body;
+
   const name = fullName || full_name;
-  if (!name?.trim()) return res.status(400).json({ message: "Full name is required" });
-  if (!username?.trim()) return res.status(400).json({ message: "Username is required" });
-  if (!/^[a-zA-Z0-9_]+$/.test(username)) return res.status(400).json({ message: "Username can only contain letters, numbers, and underscores" });
-  if (!identifier?.trim()) return res.status(400).json({ message: "Email or phone number is required" });
-  if (!password) return res.status(400).json({ message: "Password is required" });
-  if (password !== confirmPassword) return res.status(400).json({ message: "Passwords do not match" });
-  if (password.length < 8) return res.status(400).json({ message: "Password must be at least 8 characters" });
-  if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) return res.status(400).json({ message: "Password must contain uppercase, lowercase, and a number" });
+
+  if (!name?.trim())
+    return res.status(400).json({ message: "Full name is required" });
+
+  if (!username?.trim())
+    return res.status(400).json({ message: "Username is required" });
+
+  if (!/^[a-zA-Z0-9_]+$/.test(username))
+    return res.status(400).json({
+      message: "Username can only contain letters, numbers, and underscores"
+    });
+
+  if (!identifier?.trim())
+    return res.status(400).json({
+      message: "Email or phone number is required"
+    });
+
+  if (!password)
+    return res.status(400).json({
+      message: "Password is required"
+    });
+
+  if (password !== confirmPassword)
+    return res.status(400).json({
+      message: "Passwords do not match"
+    });
+
+  if (password.length < 8)
+    return res.status(400).json({
+      message: "Password must be at least 8 characters"
+    });
+
+  if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password))
+    return res.status(400).json({
+      message:
+        "Password must contain uppercase, lowercase, and a number"
+    });
 
   try {
-    let email = null, phone = null;
+    let email = null;
+    let phone = null;
+
     const cleanIdentifier = identifier.trim();
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanIdentifier);
+
+    const isEmail =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanIdentifier);
+
     const phoneDigits = cleanIdentifier.replace(/\D/g, '');
+
     const isPhone = /^\d{10,12}$/.test(phoneDigits);
-    if (isEmail) email = cleanIdentifier.toLowerCase();
-    else if (isPhone) phone = phoneDigits;
-    else return res.status(400).json({ message: "Enter valid email or phone number" });
+
+    if (isEmail) {
+      email = cleanIdentifier.toLowerCase();
+    } else if (isPhone) {
+      phone = phoneDigits;
+    } else {
+      return res.status(400).json({
+        message: "Enter valid email or phone number"
+      });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+
     const userRole = role || "customer";
-    const insertSql = `INSERT INTO users1 (full_name, username, email, phone, password, role, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())`;
-    db.query(insertSql, [name.trim(), username.trim().toLowerCase(), email, phone, hashedPassword, userRole], (err) => {
-      if (err) {
-        if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: "Username or email already exists" });
-        return res.status(500).json({ message: "Error creating account" });
+
+    // Generate teller id if role is teller
+    let tellerId = null;
+
+    if (userRole === "teller") {
+
+      const [rows] = await db.promise().query(
+        `SELECT teller_id
+         FROM users1
+         WHERE teller_id IS NOT NULL
+         ORDER BY userId DESC
+         LIMIT 1`
+      );
+
+      if (rows.length === 0) {
+        tellerId = "Till1001";
+      } else {
+
+        const lastNumber = parseInt(
+          rows[0].teller_id.replace("Till", "")
+        );
+
+        tellerId = `Till${lastNumber + 1}`;
       }
-      res.status(201).json({ message: "Account created successfully", userId: err?.insertId });
+    }
+
+    const sql = `
+      INSERT INTO users1
+      (
+        full_name,
+        username,
+        email,
+        phone,
+        password,
+        role,
+        teller_id,
+        created_at
+      )
+      VALUES
+      (?, ?, ?, ?, ?, ?, ?, NOW())
+    `;
+
+    const [result] = await db.promise().query(sql, [
+      name.trim(),
+      username.trim().toLowerCase(),
+      email,
+      phone,
+      hashedPassword,
+      userRole,
+      tellerId
+    ]);
+
+    res.status(201).json({
+      message: "Account created successfully",
+      userId: result.insertId,
+      tellerId
     });
+
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+
+    console.error(err);
+
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(400).json({
+        message: "Username, email or teller ID already exists"
+      });
+    }
+
+    res.status(500).json({
+      message: "Server error"
+    });
   }
 });
-
 // Admin signup (users table)
 router.post('/signup1', async (req, res) => {
   const { full_name, email, phone, password, role } = req.body;

@@ -141,6 +141,11 @@ router.get("/api/gl-accounts", (req, res) => {
   });
 });
 
+
+
+
+
+
 // UPDATE GL ACCOUNT (do NOT allow changing accountCode)
 router.put("/api/gl-accounts/:id", (req, res) => {
   const { id } = req.params;
@@ -673,6 +678,101 @@ router.get("/api/internal-account-statement", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to generate statement",
+      error: error.message
+    });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+// GET /api/teller-statement
+router.get('/api/teller-statement', async (req, res) => {
+  const { tellerId, fromDate, toDate } = req.query;
+
+  if (!tellerId || !fromDate || !toDate) {
+    return res.status(400).json({
+      success: false,
+      message: "Teller ID and date range are required"
+    });
+  }
+
+  const connection = await db.promise().getConnection();
+
+  try {
+    // Get teller name from users1 (fallback to tellerId if not found)
+    const [tellerRows] = await connection.execute(
+      `SELECT full_name FROM users1 WHERE teller_id = ? OR userId = ?`,
+      [tellerId, tellerId]
+    );
+    const tellerName = tellerRows.length > 0 ? tellerRows[0].full_name : tellerId;
+
+    // Opening balance (transactions before fromDate)
+    const [openingRows] = await connection.execute(
+      `SELECT balance FROM deposit_to_and_from_transaction
+       WHERE teller_id = ? AND transaction_date < ?
+       ORDER BY transaction_date DESC, id DESC LIMIT 1`,
+      [tellerId, fromDate]
+    );
+    const openingBalance = openingRows.length > 0 ? parseFloat(openingRows[0].balance) : 0;
+
+    // Transactions within the date range
+    const [transactions] = await connection.execute(
+      `SELECT
+        id,
+        reference,
+        transaction_date AS transactionDate,
+        created_at AS transactionDateTime,
+        account_name,
+        account_number,
+        narration,
+        description,
+        debit,
+        credit,
+        balance,
+        currency
+       FROM deposit_to_and_from_transaction
+       WHERE teller_id = ? AND transaction_date BETWEEN ? AND ?
+       ORDER BY transaction_date ASC, id ASC`,
+      [tellerId, fromDate, toDate]
+    );
+
+    const closingBalance = transactions.length > 0
+      ? parseFloat(transactions[transactions.length - 1].balance)
+      : openingBalance;
+
+    connection.release();
+
+    res.json({
+      success: true,
+      data: {
+        tellerId,
+        tellerName,
+        currency: transactions.length > 0 ? transactions[0].currency : 'GHS',
+        openingBalance,
+        closingBalance,
+        transactions: transactions.map(t => ({
+          ...t,
+          debit: parseFloat(t.debit) || 0,
+          credit: parseFloat(t.credit) || 0,
+          balance: parseFloat(t.balance) || 0,
+        }))
+      }
+    });
+
+  } catch (error) {
+    connection.release();
+    console.error("Teller Statement Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate teller statement",
       error: error.message
     });
   }
