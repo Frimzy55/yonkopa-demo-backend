@@ -362,7 +362,8 @@ router.post('/login2', staffLoginLimiter, async (req, res) => {
         {
           userId: user.userId,
           email: user.email,
-          role: user.role
+          role: user.role,
+          teller_id: user.teller_id
         },
         JWT_SECRET,
         { expiresIn: '2h' }
@@ -384,7 +385,8 @@ router.post('/login2', staffLoginLimiter, async (req, res) => {
           email: user.email,
           phone: user.phone,
           role: user.role,
-          status: user.status
+          status: user.status,
+          teller_id: user.teller_id
         }
       });
     });
