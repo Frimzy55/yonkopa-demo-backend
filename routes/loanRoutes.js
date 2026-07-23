@@ -672,13 +672,30 @@ router.post("/api/verify-customer", (req, res) => {
 
 
 
-router.post("/api/verify-manual-customer", (req, res) => {
+/*router.post("/api/verify-manual-customer", (req, res) => {
   let { kycCode } = req.body;
   kycCode = kycCode?.trim();
   if (!kycCode) return res.json({ verified: false });
 
   const query = `SELECT * FROM personal_kyc WHERE kycCode = ?`;
   db.query(query, [kycCode], (err, results) => {
+    if (err || results.length === 0) return res.json({ verified: false });
+    res.json({ verified: true, customer: results[0] });
+  });
+});*/
+
+
+router.post("/api/verify-manual-customer", (req, res) => {
+  let { kycCode } = req.body;
+  kycCode = kycCode?.trim();
+  if (!kycCode) return res.json({ verified: false });
+
+  // Normalize: if it doesn't start with 'kyc', prepend it
+  const normalized = kycCode.toLowerCase();
+  const searchCode = normalized.startsWith('kyc') ? normalized : 'kyc' + normalized;
+
+  const query = `SELECT * FROM personal_kyc WHERE LOWER(kycCode) = ?`;
+  db.query(query, [searchCode], (err, results) => {
     if (err || results.length === 0) return res.json({ verified: false });
     res.json({ verified: true, customer: results[0] });
   });
