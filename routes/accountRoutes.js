@@ -41,7 +41,7 @@ router.post("/api/accounts/create", async (req, res) => {
     const [customerRows] = await db.promise().query(
       `
       SELECT *
-      FROM loan_master7
+      FROM loan_master77
       WHERE customer_id = ?
       LIMIT 1
       `,

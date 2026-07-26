@@ -24,10 +24,33 @@ router.get("/api/admin/loan-progress", (req, res) => {
 });
 
 // Full loan KYC view (admin)
-router.get("/api/admin/full-loan-kyc",  (req, res) => {
+/*router.get("/api/admin/full-loan-kyc",  (req, res) => {
   const sql = "SELECT * FROM full_loan_kyc_view2 ORDER BY applicant_created_at DESC";
   db.query(sql, (err, results) => {
     if (err) return res.status(500).json({ success: false, error: err });
+    res.json(results);
+  });
+});
+*/
+
+
+// Full loan KYC view (admin)
+router.get("/api/admin/full-loan-kyc", (req, res) => {
+  const sql = `
+    SELECT *
+    FROM full_loan_kyc_view2
+    WHERE kyc_code NOT LIKE 'Cus%'
+    ORDER BY applicant_created_at DESC
+  `;
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      return res.status(500).json({ 
+        success: false, 
+        error: err 
+      });
+    }
+
     res.json(results);
   });
 });
@@ -105,7 +128,7 @@ router.get("/api/admin/approved-loan", (req, res) => {
            kyc_loan_amount,
            approved_date,
            customer_id
-    FROM loan_master5
+    FROM loan_master77
     WHERE loan_status = 'approved'
     ORDER BY approved_date DESC
   `;

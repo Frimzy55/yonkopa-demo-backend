@@ -2,6 +2,7 @@ import express from 'express';
 import { db, dbPromise } from '../config/db.js';
 import { upload } from '../middleware/upload.js';
 import { authenticateToken } from '../middleware/auth.js';
+import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 
@@ -78,6 +79,463 @@ router.post(
     }
   }
 );
+
+
+
+
+
+
+
+// Save full KYC (with file uploads)
+/*router.post(
+  "/api/kyc/save-all-manual",
+  
+  upload.fields([
+    { name: "avatar", maxCount: 1 },
+    { name: "payslip", maxCount: 1 },
+    { name: "ghanaCardFront", maxCount: 1 },
+    { name: "ghanaCardBack", maxCount: 1 },
+    { name: "employmentId", maxCount: 1 },
+    { name: "businessPicture", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    const connection = await dbPromise.getConnection();
+    try {
+      await connection.beginTransaction();
+     const userId = req.user.userId;
+      //const userId = req.user?.userId || null;
+      const toNull = (v) => (v === "" || v === undefined ? null : v);
+      const files = req.files || {};
+      const avatarPath = files?.avatar?.[0]?.filename || null;
+
+      // Personal KYC
+      await connection.query(
+        `INSERT INTO personal_kyc (userId, title, firstname, middlename, lastname, dateofbirth, gender, maritalstatus, nationalid, residentiallocation, spousename, spousecontact, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE title=VALUES(title), firstname=VALUES(firstname), middlename=VALUES(middlename), lastname=VALUES(lastname), dateofbirth=VALUES(dateofbirth), gender=VALUES(gender), maritalstatus=VALUES(maritalstatus), nationalid=VALUES(nationalid), residentiallocation=VALUES(residentiallocation), spousename=VALUES(spousename), spousecontact=VALUES(spousecontact), avatar=VALUES(avatar)`,
+        [userId, req.body.title, req.body.firstName, req.body.middleName, req.body.lastName, req.body.dateOfBirth, req.body.gender, req.body.maritalStatus, req.body.nationalId, req.body.residentialLocation, req.body.spouseName, req.body.spouseContact, avatarPath]
+      );
+
+      const [kycRow] = await connection.query(`SELECT pid FROM personal_kyc WHERE userId = ? LIMIT 1`, [userId]);
+      const pid = kycRow?.[0]?.pid;
+      if (!pid) throw new Error("Failed to generate KYC ID");
+      //const kycCode = String(pid).padStart(5, "0");
+      const kycCode = `Man${String(pid).padStart(5, "0")}`;
+      await connection.query(`UPDATE personal_kyc SET kycCode = ? WHERE pid = ?`, [kycCode, pid]);
+
+      // Notification
+      await connection.query(`INSERT INTO notification (userId, message, type, isRead) VALUES (?, ?, ?, ?)`, [userId, `Your KYC has been submitted successfully. KYC Code: ${kycCode}`, "kyc", 0]);
+
+      // Contact KYC
+      await connection.query(
+        `INSERT INTO contact_kyc (userId, mobileNumber, email, residentialAddress, residentialLandmark, city, state, alternatePhone, kyc_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE residentialAddress=VALUES(residentialAddress), residentialLandmark=VALUES(residentialLandmark), city=VALUES(city), state=VALUES(state), alternatePhone=VALUES(alternatePhone), kyc_code=VALUES(kyc_code)`,
+        [userId, req.body.mobileNumber, req.body.email, req.body.residentialAddress, req.body.residentialLandmark, req.body.city, req.body.state, req.body.alternatePhone, kycCode]
+      );
+
+      // Employment KYC
+      await connection.query(
+        `INSERT INTO employment_kyc (userId, employmentStatus, employerName, jobTitle, monthlyIncome, yearsInCurrentEmployment, workPlaceLocation, payslip, ghanaCardFront, ghanaCardBack, employmentId, businessName, businessType, monthlyBusinessIncome, businessLocation, businessGpsAddress, numberOfWorkers, yearsInBusiness, workingCapital, businessPicture, kyc_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE employmentStatus=VALUES(employmentStatus), employerName=VALUES(employerName), jobTitle=VALUES(jobTitle), monthlyIncome=VALUES(monthlyIncome), yearsInCurrentEmployment=VALUES(yearsInCurrentEmployment), workPlaceLocation=VALUES(workPlaceLocation), payslip=VALUES(payslip), ghanaCardFront=VALUES(ghanaCardFront), ghanaCardBack=VALUES(ghanaCardBack), employmentId=VALUES(employmentId), businessName=VALUES(businessName), businessType=VALUES(businessType), monthlyBusinessIncome=VALUES(monthlyBusinessIncome), businessLocation=VALUES(businessLocation), businessGpsAddress=VALUES(businessGpsAddress), numberOfWorkers=VALUES(numberOfWorkers), yearsInBusiness=VALUES(yearsInBusiness), workingCapital=VALUES(workingCapital), businessPicture=VALUES(businessPicture), kyc_code=VALUES(kyc_code)`,
+        [
+          userId, req.body.employmentStatus, toNull(req.body.employerName), toNull(req.body.jobTitle), toNull(req.body.monthlyIncome), toNull(req.body.yearsInCurrentEmployment), toNull(req.body.workPlaceLocation),
+          files?.payslip?.[0]?.filename || null, files?.ghanaCardFront?.[0]?.filename || null, files?.ghanaCardBack?.[0]?.filename || null, files?.employmentId?.[0]?.filename || null,
+          toNull(req.body.businessName), toNull(req.body.businessType), toNull(req.body.monthlyBusinessIncome), toNull(req.body.businessLocation), toNull(req.body.businessGpsAddress), toNull(req.body.numberOfWorkers), toNull(req.body.yearsInBusiness), toNull(req.body.workingCapital),
+          files?.businessPicture?.[0]?.filename || null, kycCode
+        ]
+      );
+
+      // Reference KYC
+      await connection.query(
+        `INSERT INTO reference_kyc (userId, referenceName1, referencePhone1, referenceRelationship1, referenceName2, referencePhone2, referenceRelationship2, kyc_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE referenceName1=VALUES(referenceName1), referencePhone1=VALUES(referencePhone1), referenceRelationship1=VALUES(referenceRelationship1), referenceName2=VALUES(referenceName2), referencePhone2=VALUES(referencePhone2), referenceRelationship2=VALUES(referenceRelationship2), kyc_code=VALUES(kyc_code)`,
+        [userId, req.body.referenceName1, req.body.referencePhone1, req.body.referenceRelationship1, req.body.referenceName2, req.body.referencePhone2, req.body.referenceRelationship2, kycCode]
+      );
+
+      await connection.commit();
+      return res.json({ success: true, kycCode });
+    } catch (err) {
+      await connection.rollback();
+      console.error(err);
+      return res.status(500).json({ success: false, message: err.message, code: err.code || "SERVER_ERROR" });
+    } finally {
+      connection.release();
+    }
+  }
+);*/
+
+// Save full KYC (with file uploads)
+
+router.post(
+  "/api/kyc/save-all-manual",
+
+  upload.fields([
+    { name: "avatar", maxCount: 1 },
+    { name: "payslip", maxCount: 1 },
+    { name: "ghanaCardFront", maxCount: 1 },
+    { name: "ghanaCardBack", maxCount: 1 },
+    { name: "employmentId", maxCount: 1 },
+    { name: "businessPicture", maxCount: 1 },
+  ]),
+
+  async (req, res) => {
+
+    const connection = await dbPromise.getConnection();
+
+    try {
+
+      await connection.beginTransaction();
+
+
+      const toNull = (v) =>
+        v === "" || v === undefined ? null : v;
+
+
+      const files = req.files || {};
+
+      const avatarPath =
+        files?.avatar?.[0]?.filename || null;
+
+
+
+      // ===============================
+      // CREATE USER
+      // ===============================
+
+      const defaultPassword = await bcrypt.hash(
+        "123456",
+        10
+      );
+
+
+      const [userResult] = await connection.query(
+
+        `
+        INSERT INTO users
+        (
+          full_name,
+          email,
+          phone,
+          password,
+          role,
+          user_uuid
+        )
+        VALUES (?, ?, ?, ?, ?, UUID())
+        `,
+
+        [
+          `${req.body.firstName} ${req.body.lastName}`,
+          req.body.email || null,
+          req.body.mobileNumber,
+          defaultPassword,
+          "customer"
+        ]
+
+      );
+
+
+      const userId = userResult.insertId;
+
+
+
+      // Display customer number
+      const customerCode =
+        String(userId * 10).padStart(3, "0");
+
+
+
+      // ===============================
+      // PERSONAL KYC
+      // ===============================
+
+
+      const [personalResult] = await connection.query(
+
+        `
+        INSERT INTO personal_kyc
+        (
+          userId,
+          title,
+          firstname,
+          middlename,
+          lastname,
+          dateofbirth,
+          gender,
+          maritalstatus,
+          nationalid,
+          residentiallocation,
+          spousename,
+          spousecontact,
+          avatar
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+
+        [
+
+          userId,
+          req.body.title,
+          req.body.firstName,
+          req.body.middleName,
+          req.body.lastName,
+          req.body.dateOfBirth,
+          req.body.gender,
+          req.body.maritalStatus,
+          req.body.nationalId,
+          req.body.residentialLocation,
+          req.body.spouseName,
+          req.body.spouseContact,
+          avatarPath
+
+        ]
+
+      );
+
+
+      const pid = personalResult.insertId;
+
+
+      const kycCode =
+        `Cus${String(pid).padStart(5, "0")}`;
+
+
+
+      await connection.query(
+
+        `
+        UPDATE personal_kyc
+        SET kycCode = ?
+        WHERE pid = ?
+        `,
+
+        [
+          kycCode,
+          pid
+        ]
+
+      );
+
+
+
+      // ===============================
+      // NOTIFICATION
+      // ===============================
+
+
+      await connection.query(
+
+        `
+        INSERT INTO notification
+        (
+          userId,
+          message,
+          type,
+          isRead
+        )
+        VALUES (?, ?, ?, ?)
+        `,
+
+        [
+          userId,
+          `Your KYC has been submitted successfully. KYC Code: ${kycCode}`,
+          "kyc",
+          0
+        ]
+
+      );
+
+
+
+      // ===============================
+      // CONTACT KYC
+      // ===============================
+
+
+      await connection.query(
+
+        `
+        INSERT INTO contact_kyc
+        (
+          userId,
+          mobileNumber,
+          email,
+          residentialAddress,
+          residentialLandmark,
+          city,
+          state,
+          alternatePhone,
+          kyc_code
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+
+        [
+          userId,
+          req.body.mobileNumber,
+          req.body.email,
+          req.body.residentialAddress,
+          req.body.residentialLandmark,
+          req.body.city,
+          req.body.state,
+          req.body.alternatePhone,
+          kycCode
+        ]
+
+      );
+
+
+      // ===============================
+      // EMPLOYMENT KYC
+      // ===============================
+
+
+      await connection.query(
+
+        `
+        INSERT INTO employment_kyc
+        (
+          userId,
+          employmentStatus,
+          employerName,
+          jobTitle,
+          monthlyIncome,
+          yearsInCurrentEmployment,
+          workPlaceLocation,
+          payslip,
+          ghanaCardFront,
+          ghanaCardBack,
+          employmentId,
+          businessName,
+          businessType,
+          monthlyBusinessIncome,
+          businessLocation,
+          businessGpsAddress,
+          numberOfWorkers,
+          yearsInBusiness,
+          workingCapital,
+          businessPicture,
+          kyc_code
+        )
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        `,
+
+        [
+
+          userId,
+          req.body.employmentStatus,
+
+          toNull(req.body.employerName),
+          toNull(req.body.jobTitle),
+          toNull(req.body.monthlyIncome),
+          toNull(req.body.yearsInCurrentEmployment),
+          toNull(req.body.workPlaceLocation),
+
+          files?.payslip?.[0]?.filename || null,
+          files?.ghanaCardFront?.[0]?.filename || null,
+          files?.ghanaCardBack?.[0]?.filename || null,
+          files?.employmentId?.[0]?.filename || null,
+
+          toNull(req.body.businessName),
+          toNull(req.body.businessType),
+          toNull(req.body.monthlyBusinessIncome),
+          toNull(req.body.businessLocation),
+          toNull(req.body.businessGpsAddress),
+          toNull(req.body.numberOfWorkers),
+          toNull(req.body.yearsInBusiness),
+          toNull(req.body.workingCapital),
+
+          files?.businessPicture?.[0]?.filename || null,
+
+          kycCode
+
+        ]
+
+      );
+
+
+
+      // ===============================
+      // REFERENCE KYC
+      // ===============================
+
+
+      await connection.query(
+
+        `
+        INSERT INTO reference_kyc
+        (
+          userId,
+          referenceName1,
+          referencePhone1,
+          referenceRelationship1,
+          referenceName2,
+          referencePhone2,
+          referenceRelationship2,
+          kyc_code
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+
+        [
+
+          userId,
+          req.body.referenceName1,
+          req.body.referencePhone1,
+          req.body.referenceRelationship1,
+          req.body.referenceName2,
+          req.body.referencePhone2,
+          req.body.referenceRelationship2,
+          kycCode
+
+        ]
+
+      );
+
+
+
+      await connection.commit();
+
+
+      return res.json({
+
+        success:true,
+
+        userId,
+
+        customerCode,
+
+        kycCode
+
+      });
+
+
+
+    } catch(err) {
+
+
+      await connection.rollback();
+
+      console.error(err);
+
+
+      return res.status(500).json({
+
+        success:false,
+
+        message:err.message,
+
+        code:err.code || "SERVER_ERROR"
+
+      });
+
+
+    } finally {
+
+      connection.release();
+
+    }
+
+  }
+);
+
+
+// Save full KYC (Manual – auto‑creates a user)
+
 
 // Get avatar
 router.get("/api/kyc/avatar/:userId", (req, res) => {

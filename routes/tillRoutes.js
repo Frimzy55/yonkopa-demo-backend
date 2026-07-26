@@ -257,7 +257,7 @@ router.get('/loan-account', (req, res) => {
         account_currency,
         account_status,
         avatar                    -- added avatar column
-      FROM loan_master_account
+      FROM loan_master_account1
       WHERE customer_id = ?
       LIMIT 1
     `;
