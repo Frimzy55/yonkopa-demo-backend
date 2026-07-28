@@ -386,7 +386,7 @@ router.get("/loan-product1", (req, res) => {
 
 
 
-// Get all active fees from loan_fee_configuration
+// Get all active fees from loan_fee_configurations
 router.get("/fees", (req, res) => {
   const sql = `
     SELECT 
