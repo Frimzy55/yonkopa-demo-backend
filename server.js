@@ -19,6 +19,7 @@ import glAccountRoutes from "./routes/glAccountsRoutes.js";
 import tellerRoutes from "./routes/tellerRoutes.js";
 import tillRoutes from "./routes/tillRoutes.js";
 import customerApprovalRoutes from "./routes/customerApprovalRoutes.js";
+import configurationRoute from "./routes/configurationRoutes.js";
 
 
 dotenv.config();
@@ -105,6 +106,7 @@ app.use("/", glAccountRoutes);
 app.use("/api/teller", tellerRoutes);
 app.use("/api/tills", tillRoutes);
 app.use("/api/customers", customerApprovalRoutes);
+app.use("/api/configuration", configurationRoute);
 
 /**
  * =========================
