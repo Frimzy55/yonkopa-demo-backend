@@ -201,7 +201,7 @@ router.delete("/loan-fees/:id", (req, res) => {
 
 
 // Create Loan Product
-router.post("/loan-products", (req, res) => {
+/*router.post("/loan-products", (req, res) => {
 
   const {
     productName,
@@ -323,6 +323,177 @@ router.post("/loan-products", (req, res) => {
       return res.status(500).json({
         success: false,
         message: "Failed to create loan product",
+        error: err.message
+      });
+    }
+
+
+    res.status(201).json({
+      success: true,
+      message: "Loan product created successfully",
+      id: result.insertId
+    });
+
+  });
+
+});*/
+
+
+
+// Create Loan Product
+router.post("/loan-products", (req, res) => {
+
+  const {
+    productName,
+    loanType,
+    assignToLoanTypes,
+    creditReportCategory,
+    loanRangeRequired,
+    minAmount,
+    maxAmount,
+    allowMultipleAccounts,
+    savingsBeforeEligibility,
+    loanEligibilityAmountRequired,
+    allowableDisposableIncome,
+    interestType,
+    minRate,
+    defaultRate,
+    maxRate,
+    allowMoratorium,
+    moratoriumDays,
+    includeMoratoriumPeriod,
+    loanTermDefault,
+    durationMonths,
+    repaymentCycleDefault,
+    scheduleComputationDefault,
+    applyTrunchDisbursement,
+    selectedFees,
+    chargePenaltyOverdue,
+    overduePenaltyRate,
+    overduePenaltyComputeOn,
+    overduePenaltyMoratorium,
+    chargePenaltyExpired,
+    expiredPenaltyRate,
+    expiredPenaltyComputeOn,
+    expiredPenaltyMoratorium
+  } = req.body;
+
+
+  // Convert empty values to NULL for DECIMAL fields
+  const cleanDecimal = (value) => {
+    if (value === "" || value === undefined || value === null) {
+      return null;
+    }
+
+    return Number(value);
+  };
+
+
+  const sql = `
+    INSERT INTO loan_products_configuration
+    (
+      product_name,
+      loan_type,
+      assign_to_loan_types,
+      credit_report_category,
+      loan_range_required,
+      min_amount,
+      max_amount,
+      allow_multiple_accounts,
+      savings_before_eligibility,
+      loan_eligibility_amount_required,
+      allowable_disposable_income,
+      interest_type,
+      min_rate,
+      default_rate,
+      max_rate,
+      allow_moratorium,
+      moratorium_days,
+      include_moratorium_period,
+      loan_term_default,
+      duration_months,
+      repayment_cycle_default,
+      schedule_computation_default,
+      apply_trunch_disbursement,
+      selected_fees,
+      charge_penalty_overdue,
+      overdue_penalty_rate,
+      overdue_penalty_compute_on,
+      overdue_penalty_moratorium,
+      charge_penalty_expired,
+      expired_penalty_rate,
+      expired_penalty_compute_on,
+      expired_penalty_moratorium
+    )
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `;
+
+
+  const values = [
+    productName,
+    loanType,
+    assignToLoanTypes,
+    creditReportCategory,
+    loanRangeRequired,
+
+    cleanDecimal(minAmount),
+    cleanDecimal(maxAmount),
+
+    allowMultipleAccounts,
+    savingsBeforeEligibility,
+    loanEligibilityAmountRequired,
+
+    cleanDecimal(allowableDisposableIncome),
+
+    interestType,
+
+    cleanDecimal(minRate),
+    cleanDecimal(defaultRate),
+    cleanDecimal(maxRate),
+
+    allowMoratorium,
+
+    moratoriumDays === "" ? null : moratoriumDays,
+
+    includeMoratoriumPeriod,
+
+    loanTermDefault,
+
+    durationMonths,
+
+    repaymentCycleDefault,
+    scheduleComputationDefault,
+
+    applyTrunchDisbursement,
+
+    JSON.stringify(selectedFees || []),
+
+    chargePenaltyOverdue,
+
+    cleanDecimal(overduePenaltyRate),
+
+    overduePenaltyComputeOn,
+
+    overduePenaltyMoratorium,
+
+    chargePenaltyExpired,
+
+    cleanDecimal(expiredPenaltyRate),
+
+    expiredPenaltyComputeOn,
+
+    expiredPenaltyMoratorium
+  ];
+
+
+  db.query(sql, values, (err, result) => {
+
+    if (err) {
+      console.error("Loan Product Insert Error:", err);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to create a loan product",
         error: err.message
       });
     }
