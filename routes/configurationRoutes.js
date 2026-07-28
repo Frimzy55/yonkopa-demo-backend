@@ -385,4 +385,45 @@ router.get("/loan-product1", (req, res) => {
 
 
 
+
+// Get all active fees from loan_fee_configuration
+router.get("/fees", (req, res) => {
+  const sql = `
+    SELECT 
+      id, 
+      fee_name, 
+      fee_type, 
+      fee_trend, 
+      payment_mode, 
+      status, 
+      fee_value_type, 
+      fee_amount,
+      allow_edit_at_disbursement,
+      alert_management_on_edit,
+      general_ledger_id
+    FROM loan_fee_configuration
+    WHERE status = 'Active'
+    ORDER BY fee_name
+  `;
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error("GET /fees error:", err);
+      return res.status(500).json({
+        success: false,
+        error: err.message,
+      });
+    }
+    res.json({
+      success: true,
+      data: results,
+    });
+  });
+});
+
+
+
+
+
+
 export default router;
