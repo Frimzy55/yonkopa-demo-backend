@@ -8,12 +8,7 @@ const router = express.Router();
 // ======================================
 router.post("/api/accounts/create", async (req, res) => {
   try {
-    const {
-      customer_id,
-      account_name,
-      account_type,
-      branch,
-    } = req.body;
+    const { customer_id, account_name, account_type, branch } = req.body;
 
     // ===============================
     // BASIC VALIDATION (SAFE + CLEAN)
@@ -22,7 +17,7 @@ router.post("/api/accounts/create", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Customer ID is required",
-      });        
+      });
     }
 
     if (!account_type) {
@@ -45,7 +40,7 @@ router.post("/api/accounts/create", async (req, res) => {
       WHERE customer_id = ?
       LIMIT 1
       `,
-      [customer_id]
+      [customer_id],
     );
 
     if (customerRows.length === 0) {
@@ -65,7 +60,7 @@ router.post("/api/accounts/create", async (req, res) => {
       WHERE customer_id = ?
       AND account_type = ?
       `,
-      [customer_id, type]
+      [customer_id, type],
     );
 
     if (existingAccount[0].count > 0) {
@@ -161,7 +156,7 @@ router.post("/api/accounts/create", async (req, res) => {
         branch,
         minimum_balance,
         maximum_balance,
-      ]
+      ],
     );
 
     // ===============================
@@ -172,7 +167,6 @@ router.post("/api/accounts/create", async (req, res) => {
       message: "Account created successfully",
       account_number,
     });
-
   } catch (error) {
     console.error("Account Creation Error:", error);
 
@@ -184,66 +178,6 @@ router.post("/api/accounts/create", async (req, res) => {
 });
 
 export default router;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // ======================================================
 // GET ALL ACCOUNTS
@@ -283,9 +217,7 @@ router.get("/api/accounts", async (req, res) => {
         };
       }
 
-      groupedAccounts[row.customer_id].linkedAccounts.push(
-        row.account_number
-      );
+      groupedAccounts[row.customer_id].linkedAccounts.push(row.account_number);
     });
 
     res.status(200).json({
@@ -303,7 +235,6 @@ router.get("/api/accounts", async (req, res) => {
     });
   }
 });
-
 
 // ======================================================
 // GET SINGLE CUSTOMER ACCOUNT
@@ -512,11 +443,13 @@ router.delete(
 */
 
 // GET /api/statements/account/:accountNumber
-router.get('/statements/account/:accountNumber', async (req, res) => {
+router.get("/statements/account/:accountNumber", async (req, res) => {
   const { accountNumber } = req.params;
 
   if (!accountNumber) {
-    return res.status(400).json({ success: false, message: 'Account number is required' });
+    return res
+      .status(400)
+      .json({ success: false, message: "Account number is required" });
   }
 
   const connection = await db.promise().getConnection();
@@ -537,11 +470,13 @@ router.get('/statements/account/:accountNumber', async (req, res) => {
       WHERE account_number = ?
       LIMIT 1
       `,
-      [accountNumber]
+      [accountNumber],
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Account not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: "Account not found" });
     }
 
     // Optionally compute opening balance (balance before start date) – frontend handles that separately
@@ -552,32 +487,37 @@ router.get('/statements/account/:accountNumber', async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: rows[0]
+      data: rows[0],
     });
   } catch (err) {
     if (connection) connection.release();
-    console.error('Account fetch error:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error("Account fetch error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-
-
-
-
-router.get('/statements/transactions', async (req, res) => {
+router.get("/statements/transactions", async (req, res) => {
   const { accountNumber, startDate, endDate, type } = req.query;
 
   if (!accountNumber) {
-    return res.status(400).json({ success: false, message: 'Account number is required' });
+    return res
+      .status(400)
+      .json({ success: false, message: "Account number is required" });
   }
 
   if (!startDate || !endDate) {
-    return res.status(400).json({ success: false, message: 'Start date and end date are required' });
+    return res
+      .status(400)
+      .json({
+        success: false,
+        message: "Start date and end date are required",
+      });
   }
 
-  if (type && !['deposit', 'withdrawal'].includes(type)) {
-    return res.status(400).json({ success: false, message: 'Invalid transaction type' });
+  if (type && !["deposit", "withdrawal"].includes(type)) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid transaction type" });
   }
 
   const connection = await db.promise().getConnection();
@@ -605,13 +545,13 @@ router.get('/statements/transactions', async (req, res) => {
 
     const params = [accountNumber, startDate, endDate];
 
-    if (type === 'deposit') {
-      sql += ' AND credit > 0';
-    } else if (type === 'withdrawal') {
-      sql += ' AND debit > 0';
+    if (type === "deposit") {
+      sql += " AND credit > 0";
+    } else if (type === "withdrawal") {
+      sql += " AND debit > 0";
     }
 
-    sql += ' ORDER BY transaction_date ASC, id ASC';
+    sql += " ORDER BY transaction_date ASC, id ASC";
 
     const [rows] = await connection.execute(sql, params);
     connection.release();
@@ -621,20 +561,11 @@ router.get('/statements/transactions', async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: rows
+      data: rows,
     });
   } catch (err) {
     if (connection) connection.release();
-    console.error('Transactions fetch error:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error("Transactions fetch error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
-
-
-
-
-
-
-
-
-
