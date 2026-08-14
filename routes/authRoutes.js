@@ -26,7 +26,7 @@ const loginLimiter = rateLimit({
 
   message: {
     success: false,
-    message: "Too many login attempts. Try again after 15 minutes.",
+    message: "Too many login attempts. .",
   },
 
   standardHeaders: true,

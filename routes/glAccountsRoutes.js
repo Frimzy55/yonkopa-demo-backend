@@ -775,6 +775,7 @@ router.get("/api/internal-account-statement", async (req, res) => {
       `SELECT
         id,
         reference,
+            transfer_id,      
         transaction_date AS transactionDate,
         created_at AS transactionDateTime,
         narration,
@@ -997,6 +998,63 @@ router.get("/api/internal-account-statement", async (req, res) => {
     });
   }
 });*/
+
+router.get('/api/transaction', async (req, res) => {
+  const { reference, id } = req.query;
+  let query = 'SELECT * FROM to_and_from_transaction WHERE ';
+  let params = [];
+
+  if (reference) {
+    query += 'reference = ?';
+    params.push(reference);
+  } else if (id) {
+    query += 'id = ?';
+    params.push(id);
+  } else {
+    return res.status(400).json({ success: false, message: 'Missing identifier' });
+  }
+
+  const connection = await db.promise().getConnection();
+  try {
+    const [rows] = await connection.execute(query, params);
+    connection.release();
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Transaction not found' });
+    }
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    connection.release();
+    console.error('Transaction fetch error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
+router.get('/api/transaction/transfer/:transferId', async (req, res) => {
+  const { transferId } = req.params;
+  if (!transferId) {
+    return res.status(400).json({ success: false, message: 'Transfer ID required' });
+  }
+
+  const connection = await db.promise().getConnection();
+  try {
+    const [rows] = await connection.execute(
+      `SELECT * FROM to_and_from_transaction WHERE transfer_id = ? ORDER BY id ASC`,
+      [transferId]
+    );
+    connection.release();
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'No transactions found' });
+    }
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    connection.release();
+    console.error('Transfer fetch error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
 
 router.get('/api/teller-statement', async (req, res) => {
   const { accountName, fromDate, toDate } = req.query;

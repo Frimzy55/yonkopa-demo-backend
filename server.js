@@ -20,6 +20,8 @@ import tellerRoutes from "./routes/tellerRoutes.js";
 import tillRoutes from "./routes/tillRoutes.js";
 import customerApprovalRoutes from "./routes/customerApprovalRoutes.js";
 import configurationRoute from "./routes/configurationRoutes.js";
+import imeiRoutes from "./routes/imeiRoutes.js"; 
+import passwordResetRoute from "./routes/passwordResetRoute.js";
 
 
 dotenv.config();
@@ -107,6 +109,9 @@ app.use("/api/teller", tellerRoutes);
 app.use("/api/tills", tillRoutes);
 app.use("/api/customers", customerApprovalRoutes);
 app.use("/api/configuration", configurationRoute);
+
+app.use("/api", imeiRoutes);   // <-- ADD THIS – makes all IMEI routes available under /api
+app.use("/", passwordResetRoute);
 
 /**
  * =========================
