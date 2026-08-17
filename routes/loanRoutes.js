@@ -407,6 +407,7 @@ router.get("/api/customer/:customer_id", (req, res) => {
 // ===============================
 // Loan evaluation (POST) – FIXED for numeric fields
 // ===============================
+// ===============================
 router.post("/api/loan/evaluate", async (req, res) => {
   const connection = await dbPromise.getConnection();
 
@@ -425,13 +426,7 @@ router.post("/api/loan/evaluate", async (req, res) => {
     if (!loanId) throw new Error("loan_id is required");
     if (!loan?.kyc_code) throw new Error("kyc_code is required");
 
-   // console.log("============== REQUEST DATA ==============");
-   // console.log("loan:", loan);
-    //console.log("collateral:", collateral);
-    //console.log("creditData:", creditData);
-    //console.log("finalDecision:", finalDecision);
-
-    // Insert into loans_eval
+    // Insert into loans_eval (unchanged)
     await connection.execute(
       `INSERT INTO loans_eval (
         loan_id, kyc_code, applicant_fullName, mobileNumber, loanAmount,
@@ -449,7 +444,7 @@ router.post("/api/loan/evaluate", async (req, res) => {
       ]
     );
 
-    // Insert into loan_collaterals
+    // Insert into loan_collaterals (unchanged)
     await connection.execute(
       `INSERT INTO loan_collaterals (loan_id, lending_type, collateral_type, collateral_data)
        VALUES (?, ?, ?, ?)`,
@@ -462,9 +457,7 @@ router.post("/api/loan/evaluate", async (req, res) => {
       ]
     );
 
-    // Insert into borrower_credit_assessments
-    // NOTE: All numeric columns use toDecimalOrNull() to convert empty strings to NULL.
-    // loan_recommendation is numeric → use toDecimalOrNull (fixed!)
+    // Insert into borrower_credit_assessments (unchanged)
     await connection.execute(
       `INSERT INTO borrower_credit_assessments (
         loan_id, is_creditworthy, is_able_to_pay,
@@ -514,19 +507,33 @@ router.post("/api/loan/evaluate", async (req, res) => {
         toDecimalOrNull(creditData?.householdExpenses),
         toDecimalOrNull(creditData?.otherIncome),
         toDecimalOrNull(creditData?.householdSurplus),
-        toDecimalOrNull(creditData?.loanRecommendation),   // ← FIXED: convert empty string to NULL
+        toDecimalOrNull(creditData?.loanRecommendation),
         toDecimalOrNull(creditData?.payCapacity),
         JSON.stringify(creditData?.extraData || {}),
       ]
     );
 
-    // Insert into loan_final_decisions
+    // ─── UPDATED: Insert into loan_final_decisions ──────────────────────────
+    // Now includes supervisor_recommended_amount and supervisor_recommended_term
+    const supervisorAmount = finalDecision?.supervisorRecommendedAmount ?? null;
+    const supervisorTerm = finalDecision?.supervisorRecommendedTerm ?? null;
+
     await connection.execute(
-      `INSERT INTO loan_final_decisions (loan_id, comments, is_confirmed) VALUES (?, ?, ?)`,
-      [safe(loanId), safe(finalDecision?.comments), finalDecision?.confirmed ? 1 : 0]
+      `INSERT INTO loan_final_decisions (
+        loan_id, comments, is_confirmed,
+        supervisor_recommended_amount,
+        supervisor_recommended_term
+      ) VALUES (?, ?, ?, ?, ?)`,
+      [
+        safe(loanId),
+        safe(finalDecision?.comments),
+        finalDecision?.confirmed ? 1 : 0,
+        toDecimalOrNull(supervisorAmount),   // decimal(10,2)
+        supervisorTerm ? parseInt(supervisorTerm, 10) : null // integer
+      ]
     );
 
-    // Soft delete momo_details
+    // Soft delete momo_details (unchanged)
     await connection.execute(
       `UPDATE momo_details SET is_deleted = 1 WHERE kyc_code = ?`,
       [safe(loan.kyc_code)]
@@ -554,6 +561,44 @@ router.post("/api/loan/evaluate", async (req, res) => {
   }
 });
 
+
+
+
+
+
+
+
+// GET /api/admin/loan-supervisor-recommendation/:loan_id
+router.get("/api/admin/loan-supervisor-recommendation/:loan_id", async (req, res) => {
+  const { loan_id } = req.params;
+  if (!loan_id) {
+    return res.status(400).json({ error: "loan_id is required" });
+  }
+
+  try {
+    const connection = await dbPromise.getConnection();
+    const [rows] = await connection.execute(
+      `SELECT supervisor_recommended_amount, supervisor_recommended_term
+       FROM loan_final_decisions
+       WHERE loan_id = ?`,
+      [loan_id]
+    );
+    connection.release();
+
+    if (rows.length === 0) {
+      // No recommendation found – return null values
+      return res.json({ supervisor_recommended_amount: null, supervisor_recommended_term: null });
+    }
+
+    res.json({
+      supervisor_recommended_amount: rows[0].supervisor_recommended_amount,
+      supervisor_recommended_term: rows[0].supervisor_recommended_term,
+    });
+  } catch (error) {
+    console.error("Error fetching supervisor recommendation:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 // ===============================
 // Approve loan (update momo_details)
 // ===============================
@@ -941,6 +986,107 @@ router.post("/api/verify-manual-customer", (req, res) => {
     });
   });
 });
+
+
+
+
+
+// routes/loanRoutes.js
+/*router.put('/loans/:loanId/approve-amount', async (req, res) => {
+  try {
+    const { loanId } = req.params;
+    const { approvedAmount } = req.body;
+
+    // 1. Validate input
+    if (approvedAmount === undefined || approvedAmount === null) {
+      return res.status(400).json({ error: 'approvedAmount is required' });
+    }
+    const amount = parseFloat(approvedAmount);
+    if (isNaN(amount) || amount < 0) {
+      return res.status(400).json({ error: 'approvedAmount must be a positive number' });
+    }
+
+    // 2. (Optional) Check if logged-in user has supervisor role
+    //    e.g., if (req.user.role !== 'supervisor') return res.status(403).json(...)
+
+    // 3. Update the database
+    const [result] = await db.query(
+      `UPDATE loan_details 
+       SET approved_amount = ? 
+       WHERE loan_id = ? AND is_deleted = 0`,
+      [amount, loanId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Loan not found' });
+    }
+
+    // 4. Return the updated record (or just success)
+    const [updated] = await db.query(
+      `SELECT * FROM loan_details WHERE loan_id = ?`,
+      [loanId]
+    );
+    res.json({ success: true, loan: updated[0] });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});*/
+
+
+
+// PUT /api/loans/:loan_id/update-approved-amount
+router.put('/api/loans/:loan_id/update-approved-amount', (req, res) => {
+  const { loan_id } = req.params;
+  const { approved_amount } = req.body;
+
+  if (!loan_id || approved_amount === undefined) {
+    return res.status(400).json({
+      message: 'Missing loan_id or approved_amount'
+    });
+  }
+
+  const amount = parseFloat(approved_amount);
+
+  if (isNaN(amount) || amount < 0) {
+    return res.status(400).json({
+      message: 'Invalid approved_amount'
+    });
+  }
+
+  const sql = `
+    UPDATE loan_details
+    SET approved_amount = ?
+    WHERE loan_id = ?
+      AND is_deleted = 0
+  `;
+
+  db.query(sql, [amount, loan_id], (error, result) => {
+    if (error) {
+      console.error('Error updating approved amount:', error);
+
+      return res.status(500).json({
+        message: 'Database error'
+      });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        message: 'Loan not found'
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Approved amount updated successfully',
+      loan_id,
+      approved_amount: amount
+    });
+  });
+});
+
+
 
 
 
