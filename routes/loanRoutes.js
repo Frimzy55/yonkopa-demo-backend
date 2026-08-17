@@ -739,7 +739,7 @@ router.get("/api/admin/loan-supervisor-recommendation/:loan_id", async (req, res
 
 
 
-router.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
+/*router.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
 
   const { loan_id } = req.params;
 
@@ -867,6 +867,144 @@ router.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
 
   }
 
+});*/
+
+router.put("/api/admin/approve-loan1/:loan_id", async (req, res) => {
+  const { loan_id } = req.params;
+  const { final_amount, final_term, comments } = req.body; // comments is unused here
+
+  try {
+    // 1. Validate final amount
+    const finalAmount = parseFloat(final_amount);
+    if (isNaN(finalAmount) || finalAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid final approved amount",
+      });
+    }
+
+    const finalTerm = parseInt(final_term, 10);
+    if (isNaN(finalTerm) || finalTerm <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid final loan term",
+      });
+    }
+
+    // 2. Check loan exists in momo_details
+    const [loanRows] = await db.promise().query(
+      `
+      SELECT *
+      FROM momo_details
+      WHERE loan_id = ?
+      LIMIT 1
+      `,
+      [loan_id]
+    );
+
+    if (loanRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan not found",
+      });
+    }
+
+    const loan = loanRows[0];
+
+    // Prevent double approval
+    if (loan.loan_status === "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Loan already approved",
+      });
+    }
+
+    // 3. Generate or reuse customer_id
+    let customerId = null;
+    const [existingCustomer] = await db.promise().query(
+      `
+      SELECT customer_id
+      FROM personal_kyc
+      WHERE kycCode = ?
+      AND customer_id IS NOT NULL
+      LIMIT 1
+      `,
+      [loan.kyc_code]
+    );
+
+    if (existingCustomer.length > 0) {
+      customerId = existingCustomer[0].customer_id;
+    } else {
+      const [latestCustomer] = await db.promise().query(
+        `
+        SELECT customer_id
+        FROM personal_kyc
+        WHERE customer_id IS NOT NULL
+        ORDER BY CAST(customer_id AS UNSIGNED) DESC
+        LIMIT 1
+        `
+      );
+      let nextNumber = 1;
+      if (latestCustomer.length > 0) {
+        nextNumber = parseInt(latestCustomer[0].customer_id, 10) + 1;
+      }
+      customerId = String(nextNumber).padStart(5, "0");
+    }
+
+    // Update personal_kyc with customer_id
+    await db.promise().query(
+      `
+      UPDATE personal_kyc
+      SET customer_id = ?
+      WHERE kycCode = ?
+      `,
+      [customerId, loan.kyc_code]
+    );
+
+    // 4. Update loan_details – set approved_amount and loanTerm (no updated_at)
+    await db.promise().query(
+      `
+      UPDATE loan_details
+      SET
+        approved_amount = ?,
+        loanTerm = ?
+      WHERE loan_id = ?
+        AND is_deleted = 0
+      `,
+      [finalAmount, finalTerm, loan_id]
+    );
+
+    // 5. Update momo_details status and customer_id
+    await db.promise().query(
+      `
+      UPDATE momo_details
+      SET
+        loan_status = 'approved',
+        approved_date = NOW(),
+        customer_id = ?
+      WHERE loan_id = ?
+      `,
+      [customerId, loan_id]
+    );
+
+    // 6. Optional: if you have a column for comments, add it; otherwise ignore
+    // For example, if you add `approval_remarks` later, you could set it here.
+
+    res.status(200).json({
+      success: true,
+      message: "Loan approved successfully",
+      customer_id: customerId,
+      approved_amount: finalAmount,
+      loanTerm: finalTerm,
+    });
+
+  } catch (error) {
+    console.error("Approve Loan Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Database error",
+    });
+  }
 });
 
 
@@ -1086,6 +1224,97 @@ router.put('/api/loans/:loan_id/update-approved-amount', (req, res) => {
   });
 });
 
+
+
+
+
+
+
+
+router.put('/approve-loan1/:loanId', async (req, res) => {
+  const { loanId } = req.params;
+  const { final_amount, final_term, comments } = req.body;
+
+  try {
+    // Validate amount
+    const finalAmount = parseFloat(final_amount);
+
+    if (isNaN(finalAmount) || finalAmount <= 0) {
+      return res.status(400).json({
+        message: 'Invalid final approved amount'
+      });
+    }
+
+    // Validate term
+    const finalTerm = parseInt(final_term, 10);
+
+    if (isNaN(finalTerm) || finalTerm <= 0) {
+      return res.status(400).json({
+        message: 'Invalid final loan term'
+      });
+    }
+
+    // Check that the loan exists
+    const [loans] = await db.query(
+      `
+      SELECT id, loan_id, loanAmount, approved_amount, loanTerm
+      FROM loan_details
+      WHERE loan_id = ?
+        AND is_deleted = 0
+      LIMIT 1
+      `,
+      [loanId]
+    );
+
+    if (loans.length === 0) {
+      return res.status(404).json({
+        message: 'Loan not found'
+      });
+    }
+
+    // Update approved amount and term
+    const [result] = await db.query(
+      `
+      UPDATE loan_details
+      SET
+        approved_amount = ?,
+        loanTerm = ?
+      WHERE loan_id = ?
+        AND is_deleted = 0
+      `,
+      [
+        finalAmount.toFixed(2),
+        finalTerm,
+        loanId
+      ]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(400).json({
+        message: 'Loan details could not be updated'
+      });
+    }
+
+    // Your existing loan approval logic can continue here
+    // e.g. update loan status to approved
+
+    res.json({
+      success: true,
+      message: 'Loan approved successfully',
+      loan_id: loanId,
+      approved_amount: Number(finalAmount.toFixed(2)),
+      loanTerm: finalTerm
+    });
+
+  } catch (error) {
+    console.error('Approve loan error:', error);
+
+    res.status(500).json({
+      message: 'Failed to approve loan',
+      error: error.message
+    });
+  }
+});
 
 
 

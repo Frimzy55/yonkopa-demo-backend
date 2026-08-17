@@ -140,15 +140,17 @@ router.get("/api/admin/loan1/:loan_id", (req, res) => {
   );
 });
 
+
+
 router.get("/api/admin/approved-loan", (req, res) => {
   const query = `
     SELECT applicant_fullName,
            mobileNumber,
            applicant_phone,
-           kyc_loan_amount,
+           approved_amount,
            approved_date,
            customer_id
-    FROM loan_master77
+    FROM loan_master777
     WHERE loan_status = 'approved'
     ORDER BY approved_date DESC
   `;
