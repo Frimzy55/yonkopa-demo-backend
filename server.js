@@ -22,6 +22,10 @@ import customerApprovalRoutes from "./routes/customerApprovalRoutes.js";
 import configurationRoute from "./routes/configurationRoutes.js";
 import imeiRoutes from "./routes/imeiRoutes.js"; 
 import passwordResetRoute from "./routes/passwordResetRoute.js";
+import clientKycRoute from './routes/clientKycRoute.js';
+import officerWebLoanRoutes from "./routes/officerWebLoanRoutes.js";
+
+
 
 
 dotenv.config();
@@ -112,7 +116,8 @@ app.use("/api/configuration", configurationRoute);
 
 app.use("/api", imeiRoutes);   // <-- ADD THIS – makes all IMEI routes available under /api
 app.use("/", passwordResetRoute);
-
+app.use('/api/kyc', clientKycRoute);
+app.use("/api", officerWebLoanRoutes);
 /**
  * =========================
  * GLOBAL ERROR HANDLER
